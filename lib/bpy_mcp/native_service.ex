@@ -245,7 +245,7 @@ defmodule BpyMcp.NativeService do
   def handle_export_bmesh(_args, state, temp_dir) do
     case BpyMcp.BpyMesh.export_bmesh_scene(temp_dir) do
       {:ok, bmesh_data} ->
-        {:ok, %{content: [text("BMesh data: #{inspect(bmesh_data)}")]}, state}
+        {:ok, %{content: bmesh_data}, state}
       {:error, reason} ->
         {:error, "Failed to export BMesh: #{reason}", state}
     end
