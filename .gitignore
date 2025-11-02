@@ -22,3 +22,47 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 bpy_mcp-*.tar
 
+# Elixir
+*.beam
+*.app
+.elixir_ls/
+
+# Python (for Blender integration)
+/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Configuration files that might contain sensitive data
+config/*.secret.exs
+config/*.local.exs
+
+# Dialyzer
+.dialyzer_ignore.exs
+.dialyzer/
