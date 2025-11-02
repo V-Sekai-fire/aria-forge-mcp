@@ -44,6 +44,9 @@ defmodule BpyMcp.BpyTools do
   end
 
   defp do_create_cube(name, location, size) do
+    # Ensure scene FPS is set to 30
+    ensure_scene_fps()
+
     code = """
     import bpy
 
@@ -99,6 +102,9 @@ defmodule BpyMcp.BpyTools do
   end
 
   defp do_create_sphere(name, location, radius) do
+    # Ensure scene FPS is set to 30
+    ensure_scene_fps()
+
     code = """
     import bpy
 
@@ -223,6 +229,9 @@ defmodule BpyMcp.BpyTools do
   end
 
   defp do_render_image(filepath, resolution_x, resolution_y) do
+    # Ensure scene FPS is set to 30
+    ensure_scene_fps()
+
     code = """
     import bpy
 
@@ -277,12 +286,17 @@ defmodule BpyMcp.BpyTools do
       "frame_current" => 1,
       "frame_start" => 1,
       "frame_end" => 250,
+      "fps" => 30,
+      "fps_base" => 1,
       "objects" => ["Cube", "Light", "Camera"],
       "active_object" => "Cube"
     }}
   end
 
   defp do_get_scene_info do
+    # Ensure scene FPS is set to 30 before getting info
+    ensure_scene_fps()
+
     code = """
     import bpy
 
@@ -295,6 +309,8 @@ defmodule BpyMcp.BpyTools do
         "frame_current": scene.frame_current,
         "frame_start": scene.frame_start,
         "frame_end": scene.frame_end,
+        "fps": scene.render.fps,
+        "fps_base": scene.render.fps_base,
         "objects": objects,
         "active_object": active_object
     }
@@ -317,13 +333,46 @@ defmodule BpyMcp.BpyTools do
   end
 
   # Helper functions
-  defp ensure_pythonx do
-    case Application.ensure_all_started(:pythonx) do
-      {:error, _reason} ->
-        :mock
+  @doc """
+  Ensures the Blender scene is set to 30 FPS for animations.
+  Only executes when Pythonx/Blender is available.
+  """
+  @spec ensure_scene_fps() :: :ok
+  defp ensure_scene_fps do
+    # Only try to set FPS if Pythonx is actually available
+    case check_pythonx_availability() do
+      :ok ->
+        code = """
+        import bpy
 
-      {:ok, _} ->
-        check_pythonx_availability()
+        # Set scene FPS to 30
+        bpy.context.scene.render.fps = 30
+        bpy.context.scene.render.fps_base = 1
+        """
+
+        case Pythonx.eval(code, %{}) do
+          {_result, _globals} -> :ok
+          _ -> :ok  # Continue even if setting FPS fails
+        end
+      :mock ->
+        :ok  # In mock mode, just return ok
+    end
+  rescue
+    _ -> :ok  # Continue even if Pythonx fails
+  end
+
+  defp ensure_pythonx do
+    # Force mock mode during testing to avoid Blender initialization
+    if Application.get_env(:bpy_mcp, :force_mock, false) or System.get_env("MIX_ENV") == "test" do
+      :mock
+    else
+      case Application.ensure_all_started(:pythonx) do
+        {:error, _reason} ->
+          :mock
+
+        {:ok, _} ->
+          check_pythonx_availability()
+      end
     end
   rescue
     _ -> :mock

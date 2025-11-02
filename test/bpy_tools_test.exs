@@ -113,6 +113,8 @@ defmodule BpyMcp.BpyToolsTest do
         "frame_current" => 1,
         "frame_start" => 1,
         "frame_end" => 250,
+        "fps" => 30,
+        "fps_base" => 1,
         "objects" => ["Cube", "Light", "Camera"],
         "active_object" => "Cube"
       }
@@ -126,6 +128,8 @@ defmodule BpyMcp.BpyToolsTest do
       assert Map.has_key?(info, "frame_current")
       assert Map.has_key?(info, "frame_start")
       assert Map.has_key?(info, "frame_end")
+      assert Map.has_key?(info, "fps")
+      assert Map.has_key?(info, "fps_base")
       assert Map.has_key?(info, "objects")
       assert Map.has_key?(info, "active_object")
     end
@@ -136,8 +140,16 @@ defmodule BpyMcp.BpyToolsTest do
       assert is_integer(info["frame_current"])
       assert is_integer(info["frame_start"])
       assert is_integer(info["frame_end"])
+      assert is_integer(info["fps"])
+      assert is_integer(info["fps_base"])
       assert is_list(info["objects"])
       assert is_binary(info["active_object"]) or is_nil(info["active_object"])
+    end
+
+    test "returns 30 FPS by default" do
+      {:ok, info} = BpyTools.test_mock_get_scene_info()
+      assert info["fps"] == 30
+      assert info["fps_base"] == 1
     end
   end
 
@@ -169,6 +181,8 @@ defmodule BpyMcp.BpyToolsTest do
         "frame_current" => 1,
         "frame_start" => 1,
         "frame_end" => 250,
+        "fps" => 30,
+        "fps_base" => 1,
         "objects" => ["Cube", "Light", "Camera"],
         "active_object" => "Cube"
       }
