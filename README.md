@@ -31,6 +31,81 @@ def deps do
 end
 ```
 
+## Docker Setup
+
+The project includes Docker support for both development and production environments.
+
+### Prerequisites
+
+- Docker and Docker Compose
+- At least 4GB of available RAM for Blender operations
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd bpy-mcp
+
+# Start development environment
+./docker-run.sh dev
+
+# Or start production environment
+./docker-run.sh prod
+```
+
+### Development
+
+```bash
+# Start development server with hot reload
+./docker-run.sh dev
+
+# View logs
+./docker-run.sh logs -f
+
+# Open shell in container
+./docker-run.sh shell
+
+# Stop development server
+./docker-run.sh stop
+```
+
+### Production
+
+```bash
+# Build and start production server
+./docker-run.sh prod
+
+# View production logs
+./docker-run.sh logs
+
+# Stop production server
+docker-compose -f docker-compose.prod.yml down
+```
+
+### Manual Docker Commands
+
+```bash
+# Development
+docker-compose up --build
+
+# Production
+docker-compose -f docker-compose.prod.yml up -d --build
+
+# Clean up
+docker-compose down -v
+```
+
+### Architecture
+
+The Docker setup uses a multi-stage build:
+
+- **Base**: Common dependencies (Erlang, Elixir, Blender)
+- **Builder** (sidecar): Builds the Elixir release (discarded after build)
+- **Runtime**: Minimal production image with only the release
+
+This approach minimizes the final image size while ensuring reproducible builds.
+
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at <https://hexdocs.pm/bpy_mcp>.

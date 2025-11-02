@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  bpy-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: bpy-mcp-prod
+    environment:
+      - MCP_STDIO=true
+      - MIX_ENV=prod
+    volumes:
+      - bpy_temp:/tmp
+      # Optional: Mount persistent data directory
+      - bpy_data:/app/data
+    ports:
+      - "4000:4000"
+    command: ["bin/bpy_mcp", "start"]
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bpy_temp:
+  bpy_data:

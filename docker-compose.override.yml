@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  bpy-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    environment:
+      - MIX_ENV=dev
+      - MCP_STDIO=true
+    volumes:
+      # Mount source code for development
+      - .:/app:cached
+      # Mount mix dependencies for faster rebuilds
+      - mix_deps:/app/deps
+      - mix_build:/app/_build
+    # Override command for development - use stdio server directly
+    command: ["mix", "run", "-e", "BpyMcp.StdioServer.start_link([])"]
+    restart: "no"
+    # Override user to allow writing to mounted volumes
+    user: "${UID:-1000}:${GID:-1000}"
+
+volumes:
+  mix_deps:
+  mix_build:

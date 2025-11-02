@@ -62,7 +62,7 @@ defmodule BpyMcp.Application do
 
     # Start HTTP server instead of stdio server
     children =
-      if Mix.env() == :test do
+      if Mix.env() == :test or System.get_env("MCP_STDIO") == "true" do
         children
       else
         port = System.get_env("PORT", "4000") |> String.to_integer()
