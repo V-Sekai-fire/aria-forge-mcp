@@ -404,16 +404,33 @@ defmodule BpyMcp.BpyTools do
     code = """
 import bpy
 
-# Create a new scene to ensure clean state
-bpy.ops.scene.new(type='NEW')
+# Ensure we have a scene
+if not bpy.context.scene:
+    bpy.ops.scene.new(type='NEW')
+
 scene = bpy.context.scene
-scene.name = 'Scene'
+
+# Remove all objects from the scene
+for obj in list(scene.objects):
+    bpy.data.objects.remove(obj, do_unlink=True)
+
+# Clear any orphaned data
+for mesh in list(bpy.data.meshes):
+    if mesh.users == 0:
+        bpy.data.meshes.remove(mesh)
+
+for material in list(bpy.data.materials):
+    if material.users == 0:
+        bpy.data.materials.remove(material)
 
 # Set basic scene properties
 scene.render.fps = 30
 scene.render.fps_base = 1
+scene.frame_current = 1
+scene.frame_start = 1
+scene.frame_end = 250
 
-result = "Scene reset - fresh scene created"
+result = "Scene reset - all objects cleared"
 result
 """
 

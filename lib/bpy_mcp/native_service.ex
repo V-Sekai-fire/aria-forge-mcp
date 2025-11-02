@@ -14,6 +14,14 @@ defmodule BpyMcp.NativeService do
     name: "Blender bpy MCP Server",
     version: "0.1.0"
 
+  # Whitelist of allowed commands
+  @allowed_commands MapSet.new([
+    "create_cube",
+    "create_sphere",
+    "get_scene_info",
+    "take_photo"
+  ])
+
   # Command registry - maps command names to handler functions and schemas
   @commands %{
     "create_cube" => %{
@@ -133,15 +141,19 @@ defmodule BpyMcp.NativeService do
     results = Enum.map(commands, fn %{"command" => command_name} = command_spec ->
       command_args = Map.get(command_spec, "args", %{})
 
-      case Map.get(@commands, command_name) do
-        nil ->
-          {:error, "Unknown command: #{command_name}"}
-
-        %{handler: handler} ->
-          case apply(__MODULE__, handler, [command_args, state]) do
-            {:ok, response, _new_state} -> {:ok, command_name, response}
-            {:error, reason, _new_state} -> {:error, command_name, reason}
-          end
+      # Check whitelist first
+      if MapSet.member?(@allowed_commands, command_name) do
+        case Map.get(@commands, command_name) do
+          %{handler: handler} ->
+            case apply(__MODULE__, handler, [command_args, state]) do
+              {:ok, response, _new_state} -> {:ok, command_name, response}
+              {:error, reason, _new_state} -> {:error, command_name, reason}
+            end
+          nil ->
+            {:error, command_name, "Command not implemented: #{command_name}"}
+        end
+      else
+        {:error, command_name, "Command not allowed: #{command_name}"}
       end
     end)
 
