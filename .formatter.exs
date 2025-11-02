@@ -1,4 +1,79 @@
-# Used by "mix format"
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-present K. S. Ernest (iFire) Lee
+
 [
-  inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"]
+  inputs: [
+    "{mix,.formatter}.exs",
+    "{config,lib,test}/**/*.{ex,exs}",
+    "tasks/**/*.{ex,exs}"
+  ],
+  line_length: 120,
+  locals_without_parens: [
+    # Common Phoenix functions
+    plug: 1,
+    plug: 2,
+    forward: 2,
+    forward: 3,
+    forward: 4,
+    match: 2,
+    match: 3,
+    match: 4,
+    get: 2,
+    get: 3,
+    get: 4,
+    post: 2,
+    post: 3,
+    post: 4,
+    put: 2,
+    put: 3,
+    put: 4,
+    patch: 2,
+    patch: 3,
+    patch: 4,
+    delete: 2,
+    delete: 3,
+    delete: 4,
+    options: 2,
+    options: 3,
+    options: 4,
+    connect: 2,
+    connect: 3,
+    connect: 4,
+    trace: 2,
+    trace: 3,
+    trace: 4,
+    head: 2,
+    head: 3,
+    head: 4,
+    # Common testing functions
+    describe: 2,
+    test: 2,
+    test: 3,
+    setup: 1,
+    setup: 2,
+    setup_all: 1,
+    setup_all: 2,
+    on_exit: 1,
+    # Common assertion functions
+    assert: 1,
+    assert: 2,
+    refute: 1,
+    refute: 2,
+    assert_in_delta: 3,
+    assert_in_delta: 4,
+    assert_raise: 2,
+    assert_raise: 3,
+    assert_receive: 1,
+    assert_receive: 2,
+    assert_receive: 3,
+    assert_receive: 4,
+    assert_received: 1,
+    assert_received: 2,
+    # Domain-specific functions
+    defdomain: 2,
+    defmethod: 2,
+    defmethod: 3,
+    defoperator: 2,
+    defoperator: 3
+  ]
 ]
