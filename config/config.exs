@@ -11,6 +11,6 @@ config :pythonx, :uv_init,
   version = "0.1.0"
   requires-python = "==3.12.*"
   dependencies = [
-    "bpy>=4.0.0"
+    "bpy>=4.5.4"
   ]
   """
