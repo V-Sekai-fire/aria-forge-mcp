@@ -107,7 +107,7 @@ defmodule AriaForge.NativeService.Context do
       data_json = Jason.encode!(data)
       
       # Create macaroon with context data stored in location and as encoded data
-      location = "aria-forget-context"
+      location = "aria-forge-context"
       secret_key = get_or_create_secret_key()
       
       # Generate a unique kid (key ID) - we'll store the data in a Mutations caveat

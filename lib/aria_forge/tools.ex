@@ -106,7 +106,7 @@ Gets information about the current scene.
   defdelegate plan_animation(plan_spec, temp_dir), to: Planning
 
   @doc """
-  Executes a generated plan by calling aria-forget tools in sequence.
+  Executes a generated plan by calling aria-forge tools in sequence.
   """
   @spec execute_plan(String.t(), String.t()) :: result()
   defdelegate execute_plan(plan_data, temp_dir), to: Planning

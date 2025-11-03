@@ -62,7 +62,7 @@ defmodule AriaForge.NativeService.Prompts do
           "content" => %{
             "type" => "text",
             "text" => """
-Use the aria-forget planning tools to create a basic scene setup plan.
+Use the aria-forge planning tools to create a basic scene setup plan.
 
 Plan Specification:
 - Initial state: Empty scene

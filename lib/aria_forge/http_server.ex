@@ -46,7 +46,7 @@ defmodule AriaForge.HTTPServer do
   get "/health" do
     conn
     |> put_resp_content_type("application/json")
-    |> send_resp(200, Jason.encode!(%{status: "ok", server: "aria-forget"}))
+    |> send_resp(200, Jason.encode!(%{status: "ok", server: "aria-forge"}))
   end
 
   # Catch-all route
@@ -109,7 +109,7 @@ defmodule AriaForge.HTTPServer do
           id: id,
           result: %{
             protocolVersion: "2025-03-26",
-            serverInfo: %{name: "aria-forget", version: "0.1.0"},
+            serverInfo: %{name: "aria-forge", version: "0.1.0"},
             capabilities: %{
               tools: %{listChanged: true}
             }

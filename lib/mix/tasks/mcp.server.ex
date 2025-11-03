@@ -48,11 +48,11 @@ defmodule Mix.Tasks.Mcp.Server do
 
     case transport do
       :stdio ->
-        IO.puts(:stderr, "🚀 aria-forget stdio server started")
+        IO.puts(:stderr, "🚀 aria-forge stdio server started")
         IO.puts(:stderr, "📡 Ready to accept MCP protocol messages via stdin/stdout")
 
       _ ->
-        IO.puts("🚀 aria-forget #{transport} server started on port #{port}")
+        IO.puts("🚀 aria-forge #{transport} server started on port #{port}")
         IO.puts("📡 MCP endpoint: http://localhost:#{port}")
         if transport == :sse do
           IO.puts("📡 SSE endpoint: http://localhost:#{port}/sse")

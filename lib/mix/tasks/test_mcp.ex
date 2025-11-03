@@ -10,7 +10,7 @@ defmodule Mix.Tasks.TestMcp do
     
     alias AriaForge.NativeService
     
-    IO.puts("🧪 Testing aria-forget MCP Server via CLI")
+    IO.puts("🧪 Testing aria-forge MCP Server via CLI")
     IO.puts("=" <> String.duplicate("=", 50))
     
     # Initialize the server state

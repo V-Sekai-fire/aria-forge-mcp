@@ -6,7 +6,7 @@ defmodule AriaForge.Tools.Planning do
   Planning tools for generating sequences of commands.
   
   These tools help plan complex workflows by generating ordered sequences
-  of aria-forget commands that respect dependencies and constraints.
+  of aria-forge commands that respect dependencies and constraints.
   
   Uses aria_planner library for planning algorithms when available.
   """
@@ -122,7 +122,7 @@ defmodule AriaForge.Tools.Planning do
   @doc """
   Plans a scene construction workflow.
   
-  Given initial and goal scene states, generates a sequence of aria-forget commands.
+  Given initial and goal scene states, generates a sequence of aria-forge commands.
   """
   @spec plan_scene_construction(map(), String.t()) :: planning_result()
   def plan_scene_construction(plan_spec, _temp_dir) do
@@ -191,7 +191,7 @@ defmodule AriaForge.Tools.Planning do
   end
 
   @doc """
-  Executes a generated plan by calling aria-forget tools in sequence.
+  Executes a generated plan by calling aria-forge tools in sequence.
   
   Returns execution result with success/failure information.
   """

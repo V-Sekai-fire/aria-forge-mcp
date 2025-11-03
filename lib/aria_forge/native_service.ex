@@ -346,7 +346,7 @@ defmodule AriaForge.NativeService do
   deftool "execute_plan" do
     meta do
       name("Execute Plan")
-      description("Executes a previously generated plan by calling aria-forget tools in the specified order. Handles dependencies and failures.")
+      description("Executes a previously generated plan by calling aria-forge tools in the specified order. Handles dependencies and failures.")
     end
 
     input_schema(%{
