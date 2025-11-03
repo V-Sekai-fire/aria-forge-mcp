@@ -67,13 +67,17 @@ defmodule BpyMcp.Application do
     
     # Configure for stdio mode when using stdio transport
     if transport_type == :stdio do
+      # Suppress all stdout output - critical for JSON-RPC over stdio
+      # Redirect any potential stdout writes to stderr
       Logger.configure(level: :emergency)
       Application.put_env(:ex_mcp, :stdio_mode, true)
       Application.put_env(:ex_mcp, :stdio_startup_delay, 10)
       
-      # Output startup message to stderr (won't contaminate stdout JSON stream)
-      IO.puts(:stderr, "🚀 bpy-mcp stdio server started")
-      IO.puts(:stderr, "📡 Ready to accept MCP protocol messages via stdin/stdout")
+      # Node name conflicts are warnings, not fatal - they don't affect stdio operation
+      # The node name is set by the release system and can't be easily changed at runtime
+      
+      # DO NOT output anything to stdout/stderr here - the MCP server handles initialization
+      # Any output before ExMCP is ready will break the JSON-RPC protocol
     end
 
     children = [

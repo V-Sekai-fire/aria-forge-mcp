@@ -47,7 +47,10 @@ defmodule BpyMcp.MixProject do
     [
       bpy_mcp: [
         include_executables_for: [:unix],
-        applications: [bpy_mcp: :permanent]
+        applications: [bpy_mcp: :permanent],
+        # Use unique node names to avoid conflicts when multiple instances start
+        # Generate node name based on timestamp to ensure uniqueness
+        vm_args: "rel/vm.args"
       ]
     ]
   end

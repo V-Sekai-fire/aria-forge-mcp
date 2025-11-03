@@ -166,18 +166,37 @@ defmodule BpyMcp.NativeService do
   # Override handle_request to intercept tools/list and convert input_schema to inputSchema
   # This ensures tools returned have camelCase keys as required by MCP specification
   @impl true
-  def handle_request(%{"method" => "tools/list"} = request, params, state) do
-    # Handle tools/list specially to convert input_schema to inputSchema
-    # Call parent first to get the standard response
-    case super(request, params, state) do
-      {:reply, response, new_state} ->
-        # Convert input_schema to inputSchema in the response
-        converted_response = SchemaConverter.convert_response_keys(response)
-        {:reply, converted_response, new_state}
-      
-      other ->
-        other
-    end
+  def handle_request(%{"method" => "tools/list"} = request, _params, state) do
+    # Get tools directly using get_tools() from ex_mcp
+    tools_map = get_tools()
+    
+    # Convert tools map to list format required by MCP spec
+    tools_list = 
+      tools_map
+      |> Map.values()
+      |> Enum.map(fn tool ->
+        # Convert tool to MCP format with camelCase keys
+        %{
+          "name" => tool.name,
+          "description" => tool.description,
+          "inputSchema" => SchemaConverter.convert_keys_to_camel_case(tool.input_schema)
+        }
+      end)
+    
+    # Get id from request if present
+    id = Map.get(request, "id", nil)
+    
+    # Build proper JSON-RPC response
+    response = 
+      %{
+        "jsonrpc" => "2.0",
+        "result" => %{
+          "tools" => tools_list
+        }
+      }
+      |> then(fn r -> if id, do: Map.put(r, "id", id), else: r end)
+    
+    {:reply, response, state}
   end
 
   alias BpyMcp.NativeService.Context
