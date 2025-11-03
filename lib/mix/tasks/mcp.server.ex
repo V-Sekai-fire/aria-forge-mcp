@@ -3,9 +3,9 @@
 
 defmodule Mix.Tasks.Mcp.Server do
   @moduledoc """
-  Mix task to run the MCP Blender bpy HTTP server.
+  Mix task to run the MCP bpy HTTP server.
 
-  This task starts the MCP server that provides Blender 3D modeling
+  This task starts the MCP server that provides 3D modeling
   capabilities via the Model Context Protocol over HTTP.
 
   ## Usage
@@ -44,15 +44,15 @@ defmodule Mix.Tasks.Mcp.Server do
     Mix.Task.run("app.start")
 
     # Start the MCP application
-    Application.ensure_all_started(:bpy_mcp)
+    Application.ensure_all_started(:aria_forge)
 
     case transport do
       :stdio ->
-        IO.puts(:stderr, "🚀 bpy-mcp stdio server started")
+        IO.puts(:stderr, "🚀 aria-forget stdio server started")
         IO.puts(:stderr, "📡 Ready to accept MCP protocol messages via stdin/stdout")
 
       _ ->
-        IO.puts("🚀 bpy-mcp #{transport} server started on port #{port}")
+        IO.puts("🚀 aria-forget #{transport} server started on port #{port}")
         IO.puts("📡 MCP endpoint: http://localhost:#{port}")
         if transport == :sse do
           IO.puts("📡 SSE endpoint: http://localhost:#{port}/sse")

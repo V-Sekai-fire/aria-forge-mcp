@@ -8,9 +8,9 @@ defmodule Mix.Tasks.TestMcp do
   def run(_args) do
     Mix.Task.run("app.start")
     
-    alias BpyMcp.NativeService
+    alias AriaForge.NativeService
     
-    IO.puts("🧪 Testing bpy-mcp MCP Server via CLI")
+    IO.puts("🧪 Testing aria-forget MCP Server via CLI")
     IO.puts("=" <> String.duplicate("=", 50))
     
     # Initialize the server state
@@ -58,7 +58,7 @@ defmodule Mix.Tasks.TestMcp do
         IO.puts("❌ Unexpected result: #{inspect(other)}")
     end
     
-    # Test 4: Execute a Blender command
+    # Test 4: Execute a command
     IO.puts("\n🎨 Test 4: Create a cube")
     case NativeService.handle_tool_call("create_cube", %{
       "name" => "TestCube",

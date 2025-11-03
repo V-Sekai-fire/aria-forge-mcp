@@ -9,11 +9,11 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR" || exit 1
 
 # Release binary path
-RELEASE_BIN="${PROJECT_DIR}/_build/dev/rel/bpy_mcp/bin/bpy_mcp"
+RELEASE_BIN="${PROJECT_DIR}/_build/dev/rel/aria_forge/bin/aria_forge"
 
 # If dev release doesn't exist, try prod
 if [ ! -f "$RELEASE_BIN" ]; then
-  RELEASE_BIN="${PROJECT_DIR}/_build/prod/rel/bpy_mcp/bin/bpy_mcp"
+  RELEASE_BIN="${PROJECT_DIR}/_build/prod/rel/aria_forge/bin/aria_forge"
 fi
 
 # Stop any existing instances gracefully
@@ -22,7 +22,7 @@ if [ -f "$RELEASE_BIN" ]; then
   # Give processes time to clean up
   sleep 0.5
   # Force kill any remaining beam processes
-  pkill -f "beam.*bpy_mcp" 2>/dev/null || true
+  pkill -f "beam.*aria_forge" 2>/dev/null || true
   sleep 0.2
 fi
 

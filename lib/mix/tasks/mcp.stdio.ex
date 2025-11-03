@@ -3,9 +3,9 @@
 
 defmodule Mix.Tasks.Mcp.Stdio do
   @moduledoc """
-  Mix task to run the MCP Blender bpy stdio server.
+  Mix task to run the MCP bpy stdio server.
 
-  This task starts the MCP server that provides Blender 3D modeling
+  This task starts the MCP server that provides 3D modeling
   capabilities via the Model Context Protocol over stdin/stdout.
 
   ## Usage
@@ -38,7 +38,7 @@ defmodule Mix.Tasks.Mcp.Stdio do
     Mix.Task.run("app.start")
 
     # Start the MCP application
-    Application.ensure_all_started(:bpy_mcp)
+    Application.ensure_all_started(:aria_forge)
 
     # DO NOT output to stdout/stderr - any output breaks JSON-RPC protocol
     # The MCP server will handle all communication via stdin/stdout

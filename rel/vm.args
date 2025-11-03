@@ -1,11 +1,11 @@
 ## Name of the node - use unique name based on timestamp to avoid conflicts
-## Will be overridden by ELIXIR_ERL_OPTIONS if set (which is done by start_bpy_mcp.sh)
+## Will be overridden by ELIXIR_ERL_OPTIONS if set (which is done by start_aria_forge.sh)
 ## For stdio mode, we disable distributed erlang entirely to avoid node name conflicts
 ## Comment out -sname to disable distributed erlang (uncomment if needed for clustering)
-## -sname bpy_mcp
+## -sname aria_forge
 
 ## Cookie for distributed erlang (only needed if using -sname)
-## -setcookie bpy_mcp_cookie
+## -setcookie aria_forge_cookie
 
 ## Redirect all error/warning logging to stderr to prevent stdout contamination
 ## This is critical for stdio MCP transport where stdout must only contain JSON-RPC

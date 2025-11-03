@@ -1,9 +1,9 @@
-defmodule BpyMcp.BpyMeshTest do
+defmodule AriaForge.MeshTest do
   use ExUnit.Case, async: true
 
   describe "export_json/2" do
     test "exports mock data successfully" do
-      result = BpyMcp.BpyMesh.export_json("/tmp", %{})
+      result = AriaForge.Mesh.export_json("/tmp", %{})
 
       assert {:ok, json_string} = result
       assert is_binary(json_string)
@@ -22,7 +22,7 @@ defmodule BpyMcp.BpyMeshTest do
     end
 
     test "includes triangulation data in exported mesh" do
-      result = BpyMcp.BpyMesh.export_json("/tmp", %{})
+      result = AriaForge.Mesh.export_json("/tmp", %{})
       assert {:ok, json_string} = result
 
       data = Jason.decode!(json_string)
@@ -51,13 +51,13 @@ defmodule BpyMcp.BpyMeshTest do
   describe "import_bmesh_scene/2" do
     test "imports mock glTF data successfully" do
       # First export some data to get valid glTF JSON
-      {:ok, gltf_data} = BpyMcp.BpyMesh.export_bmesh_scene("/tmp")
+      {:ok, gltf_data} = AriaForge.Mesh.export_bmesh_scene("/tmp")
 
       # Convert to JSON string
       gltf_json = Jason.encode!(gltf_data)
 
       # Now import it back
-      result = BpyMcp.BpyMesh.import_bmesh_scene(gltf_json, "/tmp")
+      result = AriaForge.Mesh.import_bmesh_scene(gltf_json, "/tmp")
 
       assert {:ok, message} = result
       assert is_binary(message)
@@ -66,7 +66,7 @@ defmodule BpyMcp.BpyMeshTest do
     end
 
     test "handles invalid JSON gracefully" do
-      result = BpyMcp.BpyMesh.import_bmesh_scene("invalid json", "/tmp")
+      result = AriaForge.Mesh.import_bmesh_scene("invalid json", "/tmp")
 
       assert {:error, message} = result
       assert is_binary(message)
@@ -90,7 +90,7 @@ defmodule BpyMcp.BpyMeshTest do
       }
 
       gltf_json = Jason.encode!(gltf_data)
-      result = BpyMcp.BpyMesh.import_bmesh_scene(gltf_json, "/tmp")
+      result = AriaForge.Mesh.import_bmesh_scene(gltf_json, "/tmp")
 
       # Should succeed but import 0 meshes since no EXT_mesh_bmesh data
       assert {:ok, message} = result
@@ -101,11 +101,11 @@ defmodule BpyMcp.BpyMeshTest do
   describe "round-trip export/import" do
     test "export then import preserves mesh structure" do
       # Export mock scene
-      {:ok, exported_gltf} = BpyMcp.BpyMesh.export_bmesh_scene("/tmp")
+      {:ok, exported_gltf} = AriaForge.Mesh.export_bmesh_scene("/tmp")
 
       # Convert to JSON and back
       gltf_json = Jason.encode!(exported_gltf)
-      {:ok, import_message} = BpyMcp.BpyMesh.import_bmesh_scene(gltf_json, "/tmp")
+      {:ok, import_message} = AriaForge.Mesh.import_bmesh_scene(gltf_json, "/tmp")
 
       # Verify import succeeded
       assert String.contains?(import_message, "Imported")
@@ -121,7 +121,7 @@ defmodule BpyMcp.BpyMeshTest do
 
     test "EXT_mesh_bmesh topology reconstruction" do
       # Export mock scene
-      {:ok, exported_gltf} = BpyMcp.BpyMesh.export_bmesh_scene("/tmp")
+      {:ok, exported_gltf} = AriaForge.Mesh.export_bmesh_scene("/tmp")
 
       # Get the EXT_mesh_bmesh data from the first mesh
       first_mesh = List.first(exported_gltf["meshes"] || [])
@@ -161,9 +161,9 @@ defmodule BpyMcp.BpyMeshTest do
       buffers = exported_gltf["buffers"] || []
 
       # Reconstruct actual data using accessor indices
-      reconstructed_vertices = BpyMcp.BpyMesh.test_reconstruct_vertices_from_accessors(ext_bmesh, accessors, bufferViews, buffers)
-      reconstructed_edges = BpyMcp.BpyMesh.test_reconstruct_edges_from_accessors(ext_bmesh, accessors, bufferViews, buffers)
-      reconstructed_faces = BpyMcp.BpyMesh.test_reconstruct_faces_from_accessors(ext_bmesh, accessors, bufferViews, buffers)
+      reconstructed_vertices = AriaForge.Mesh.test_reconstruct_vertices_from_accessors(ext_bmesh, accessors, bufferViews, buffers)
+      reconstructed_edges = AriaForge.Mesh.test_reconstruct_edges_from_accessors(ext_bmesh, accessors, bufferViews, buffers)
+      reconstructed_faces = AriaForge.Mesh.test_reconstruct_faces_from_accessors(ext_bmesh, accessors, bufferViews, buffers)
 
       # Verify reconstructed data
       assert length(reconstructed_vertices) == vertices["count"]

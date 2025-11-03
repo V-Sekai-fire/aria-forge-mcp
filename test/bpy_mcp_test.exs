@@ -1,8 +1,8 @@
-defmodule BpyMcpTest do
+defmodule AriaForgeTest do
   use ExUnit.Case
-  doctest BpyMcp
+  doctest AriaForge
 
   test "greets the world" do
-    assert BpyMcp.hello() == :world
+    assert AriaForge.hello() == :world
   end
 end

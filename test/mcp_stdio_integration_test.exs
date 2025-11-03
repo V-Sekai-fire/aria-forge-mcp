@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
-defmodule BpyMcp.McpStdioIntegrationTest do
+defmodule AriaForge.McpStdioIntegrationTest do
   use ExUnit.Case, async: false
-  alias BpyMcp.NativeService
+  alias AriaForge.NativeService
 
   @moduledoc """
   Integration tests for MCP stdio transport using JSON-RPC protocol.
@@ -19,10 +19,10 @@ defmodule BpyMcp.McpStdioIntegrationTest do
     System.put_env("MCP_TRANSPORT", "stdio")
     
     # Ensure application is started
-    Application.ensure_all_started(:bpy_mcp)
+    Application.ensure_all_started(:aria_forge)
     
     on_exit(fn ->
-      Application.stop(:bpy_mcp)
+      Application.stop(:aria_forge)
     end)
     
     %{}
