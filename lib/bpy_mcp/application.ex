@@ -49,14 +49,32 @@ defmodule BpyMcp.Application do
     Application.ensure_all_started(:pythonx)
     Application.ensure_all_started(:briefly)
 
-    # Determine transport type from environment or default to HTTP
+    # Determine transport type from environment
+    # In production/release, default to stdio for MCP client integration
+    # Check if running in a release (Mix not available) or production environment
+    is_release = not Code.ensure_loaded?(Mix)
+    is_prod = if is_release, do: true, else: Mix.env() == :prod
+    
+    default_transport = if is_prod, do: "stdio", else: "http"
+    
     transport_type = 
-      case System.get_env("MCP_TRANSPORT", "http") do
+      case System.get_env("MCP_TRANSPORT", default_transport) do
         "stdio" -> :stdio
         "http" -> :http
         "sse" -> :sse
-        _ -> :http
+        _ -> if is_prod, do: :stdio, else: :http
       end
+    
+    # Configure for stdio mode when using stdio transport
+    if transport_type == :stdio do
+      Logger.configure(level: :emergency)
+      Application.put_env(:ex_mcp, :stdio_mode, true)
+      Application.put_env(:ex_mcp, :stdio_startup_delay, 10)
+      
+      # Output startup message to stderr (won't contaminate stdout JSON stream)
+      IO.puts(:stderr, "🚀 bpy-mcp stdio server started")
+      IO.puts(:stderr, "📡 Ready to accept MCP protocol messages via stdin/stdout")
+    end
 
     children = [
       # Registry for scene managers
@@ -68,7 +86,7 @@ defmodule BpyMcp.Application do
 
     # Start MCP server with appropriate transport
     children =
-      if Mix.env() == :test do
+      if not is_release and Code.ensure_loaded?(Mix) and Mix.env() == :test do
         # In test, start with native transport
         children ++ [
           {BpyMcp.NativeService, [transport: :native, name: BpyMcp.NativeService]}
