@@ -68,14 +68,17 @@ defmodule BpyMcp.Application do
     
     # Configure for stdio mode when using stdio transport
     if transport_type == :stdio do
-      # Suppress all stdout output - critical for JSON-RPC over stdio
-      # Redirect any potential stdout writes to stderr
+      # Logger is already set to emergency in vm.args/ELIXIR_ERL_OPTIONS
+      # But configure it again here as a safeguard to ensure no warnings escape
+      # This must be the FIRST thing we do to prevent any warnings
       Logger.configure(level: :emergency)
+      
+      # Suppress all stdout output - critical for JSON-RPC over stdio
+      # Redirect any potential stdout writes to stderr (though logger should handle this)
       Application.put_env(:ex_mcp, :stdio_mode, true)
       Application.put_env(:ex_mcp, :stdio_startup_delay, 10)
       
-      # Node name conflicts are warnings, not fatal - they don't affect stdio operation
-      # The node name is set by the release system and can't be easily changed at runtime
+      # Distributed Erlang is disabled for stdio mode, so no node name conflicts possible
       
       # DO NOT output anything to stdout/stderr here - the MCP server handles initialization
       # Any output before ExMCP is ready will break the JSON-RPC protocol

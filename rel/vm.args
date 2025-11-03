@@ -1,9 +1,19 @@
 ## Name of the node - use unique name based on timestamp to avoid conflicts
-## Will be overridden by ELIXIR_ERL_OPTIONS if set
--sname bpy_mcp
+## Will be overridden by ELIXIR_ERL_OPTIONS if set (which is done by start_bpy_mcp.sh)
+## For stdio mode, we disable distributed erlang entirely to avoid node name conflicts
+## Comment out -sname to disable distributed erlang (uncomment if needed for clustering)
+## -sname bpy_mcp
 
-## Cookie for distributed erlang
--setcookie bpy_mcp_cookie
+## Cookie for distributed erlang (only needed if using -sname)
+## -setcookie bpy_mcp_cookie
+
+## Redirect all error/warning logging to stderr to prevent stdout contamination
+## This is critical for stdio MCP transport where stdout must only contain JSON-RPC
+-kernel error_logger {file,"/dev/stderr"}
+
+## Set logger level to emergency to suppress all warnings and info messages
+## This prevents any log output from contaminating stdout during stdio MCP communication
+-elixir logger_level emergency
 
 ## Enable kernel poll and a few optimizations
 +K true
