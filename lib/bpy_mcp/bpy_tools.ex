@@ -15,7 +15,7 @@ defmodule BpyMcp.BpyTools do
   - `BpyMcp.BpyTools.Utils` - Shared utilities
   """
 
-  alias BpyMcp.BpyTools.{Objects, Materials, Rendering, Scene, Introspection}
+  alias BpyMcp.BpyTools.{Objects, Materials, Rendering, Scene, Introspection, Planning}
 
   @type bpy_result :: {:ok, term()} | {:error, String.t()}
 
@@ -27,7 +27,7 @@ defmodule BpyMcp.BpyTools do
   defdelegate create_cube(name \\ "Cube", location \\ [0, 0, 0], size \\ 2.0, temp_dir),
     to: Objects
 
-  @doc """
+@doc """
   Creates a sphere object in the Blender scene.
   """
   @spec create_sphere(String.t(), [number()], number(), String.t()) :: bpy_result()
@@ -36,9 +36,9 @@ defmodule BpyMcp.BpyTools do
 
   # Material functions
   @doc """
-  Sets a material on an object.
-  """
-  @spec set_material(String.t(), String.t(), [number()], String.t()) :: bpy_result()
+Sets a material on an object.
+"""
+@spec set_material(String.t(), String.t(), [number()], String.t()) :: bpy_result()
   defdelegate set_material(
                 object_name,
                 material_name \\ "Material",
@@ -48,10 +48,10 @@ defmodule BpyMcp.BpyTools do
               to: Materials
 
   # Rendering functions
-  @doc """
-  Renders the current scene to an image file.
-  """
-  @spec render_image(String.t(), integer(), integer(), String.t()) :: bpy_result()
+@doc """
+Renders the current scene to an image file.
+"""
+@spec render_image(String.t(), integer(), integer(), String.t()) :: bpy_result()
   defdelegate render_image(
                 filepath,
                 resolution_x \\ 1920,
@@ -61,16 +61,16 @@ defmodule BpyMcp.BpyTools do
               to: Rendering
 
   # Scene management functions
-  @doc """
-  Resets the Blender scene to a clean state by removing all objects.
-  """
-  @spec reset_scene(String.t()) :: bpy_result()
+@doc """
+Resets the Blender scene to a clean state by removing all objects.
+"""
+@spec reset_scene(String.t()) :: bpy_result()
   defdelegate reset_scene(temp_dir), to: Scene
 
-  @doc """
-  Gets information about the current Blender scene.
-  """
-  @spec get_scene_info(String.t()) :: bpy_result()
+@doc """
+Gets information about the current Blender scene.
+"""
+@spec get_scene_info(String.t()) :: bpy_result()
   defdelegate get_scene_info(temp_dir), to: Scene
 
   # Introspection functions
@@ -86,26 +86,51 @@ defmodule BpyMcp.BpyTools do
   @spec introspect_python(String.t(), String.t() | nil, String.t()) :: bpy_result()
   defdelegate introspect_python(object_path, prep_code \\ nil, temp_dir), to: Introspection
 
+  # Planning functions
+  @doc """
+  Plans a scene construction workflow given initial and goal states.
+  """
+  @spec plan_scene_construction(map(), String.t()) :: bpy_result()
+  defdelegate plan_scene_construction(plan_spec, temp_dir), to: Planning
+
+  @doc """
+  Plans material application sequence respecting dependencies.
+  """
+  @spec plan_material_application(map(), String.t()) :: bpy_result()
+  defdelegate plan_material_application(plan_spec, temp_dir), to: Planning
+
+  @doc """
+  Plans animation sequence with temporal constraints.
+  """
+  @spec plan_animation(map(), String.t()) :: bpy_result()
+  defdelegate plan_animation(plan_spec, temp_dir), to: Planning
+
+  @doc """
+  Executes a generated plan by calling bpy-mcp tools in sequence.
+  """
+  @spec execute_plan(String.t(), String.t()) :: bpy_result()
+  defdelegate execute_plan(plan_data, temp_dir), to: Planning
+
   # Test helper functions for backward compatibility
-  @doc false
+@doc false
   def test_mock_create_cube(name, location, size),
     do: Objects.test_mock_create_cube(name, location, size)
 
-  @doc false
+@doc false
   def test_mock_create_sphere(name, location, radius),
     do: Objects.test_mock_create_sphere(name, location, radius)
 
-  @doc false
+@doc false
   def test_mock_set_material(object_name, material_name, color),
     do: Materials.test_mock_set_material(object_name, material_name, color)
 
-  @doc false
-  def test_mock_render_image(filepath, resolution_x, resolution_y),
+@doc false
+def test_mock_render_image(filepath, resolution_x, resolution_y),
     do: Rendering.test_mock_render_image(filepath, resolution_x, resolution_y)
 
-  @doc false
+@doc false
   def test_mock_get_scene_info(), do: Scene.test_mock_get_scene_info()
 
-  @doc false
+@doc false
   def test_mock_reset_scene(), do: Scene.test_mock_reset_scene()
 end

@@ -51,7 +51,7 @@ defmodule Mix.Tasks.TestMcp do
       {:ok, %{content: content}, new_state} ->
         text = Enum.at(content, 0)["text"] || inspect(content)
         IO.puts("✅ Result: #{text}")
-        state = new_state
+        _state = new_state
       {:error, reason, _new_state} ->
         IO.puts("❌ Error: #{reason}")
       other ->
@@ -68,7 +68,7 @@ defmodule Mix.Tasks.TestMcp do
       {:ok, %{content: content}, new_state} ->
         text = Enum.at(content, 0)["text"] || inspect(content)
         IO.puts("✅ Result: #{text}")
-        state = new_state
+        _state = new_state
       {:error, reason, _new_state} ->
         IO.puts("❌ Error: #{reason}")
       other ->

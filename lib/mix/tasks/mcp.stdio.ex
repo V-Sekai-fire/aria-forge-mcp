@@ -28,19 +28,22 @@ defmodule Mix.Tasks.Mcp.Stdio do
     # Configure for STDIO mode before starting
     System.put_env("MCP_TRANSPORT", "stdio")
     
-    # Suppress logging to stdout for stdio transport
+    # Suppress logging to stdout for stdio transport - CRITICAL for JSON-RPC
+    # Any stdout output before MCP initialization will break JSON parsing
     Logger.configure(level: :emergency)
     Application.put_env(:ex_mcp, :stdio_mode, true)
     Application.put_env(:ex_mcp, :stdio_startup_delay, 10)
 
+    # Start application BEFORE any stdout writes
     Mix.Task.run("app.start")
 
     # Start the MCP application
     Application.ensure_all_started(:bpy_mcp)
 
-    # Output to stderr to avoid contaminating stdout JSON stream
-    IO.puts(:stderr, "🚀 bpy-mcp stdio server started")
-    IO.puts(:stderr, "📡 Ready to accept MCP protocol messages via stdin/stdout")
+    # DO NOT output to stdout/stderr - any output breaks JSON-RPC protocol
+    # The MCP server will handle all communication via stdin/stdout
+    # Note: Node name is set by the calling script via ELIXIR_ERL_OPTIONS
+    # This prevents "node name already in use" errors
 
     # Keep the process running
     Process.sleep(:infinity)

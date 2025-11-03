@@ -1,0 +1,18 @@
+## Name of the node - use unique name based on timestamp to avoid conflicts
+## Will be overridden by ELIXIR_ERL_OPTIONS if set
+-sname bpy_mcp
+
+## Cookie for distributed erlang
+-setcookie bpy_mcp_cookie
+
+## Enable kernel poll and a few optimizations
++K true
++A 5
++sbt db
+
+## Increase number of concurrent ports/sockets
+-env ERL_MAX_PORTS 4096
+
+## Tweak GC to run more often
+-env ERL_FULLSWEEP_AFTER 10
+

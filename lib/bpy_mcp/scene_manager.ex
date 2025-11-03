@@ -79,15 +79,35 @@ defmodule BpyMcp.SceneManager do
   def init(scene_id) do
     Logger.info("Starting SceneManager for scene: #{scene_id}")
 
+    # Create temp directory for this scene context
+    temp_dir = BpyMcp.NativeService.Context.create_temp_dir()
+
     # Initialize scene state
     state = %{
       scene_id: scene_id,
       initialized: false,
       operation_count: 0,
-      last_operation: nil
+      last_operation: nil,
+      temp_dir: temp_dir
     }
 
     {:ok, state}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    # Clean up temporary directory when process terminates
+    temp_dir = Map.get(state, :temp_dir)
+    if temp_dir && File.exists?(temp_dir) && String.starts_with?(temp_dir, System.tmp_dir!()) do
+      try do
+        File.rm_rf(temp_dir)
+        Logger.debug("Cleaned up temp directory: #{temp_dir}")
+      rescue
+        e ->
+          Logger.warning("Failed to clean up temp directory #{temp_dir}: #{Exception.message(e)}")
+      end
+    end
+    :ok
   end
 
   @impl true

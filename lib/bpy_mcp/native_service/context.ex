@@ -207,11 +207,45 @@ defmodule BpyMcp.NativeService.Context do
 
   @doc false
   # Get or create a secret key for macaroon signing
-  # In production, this should be configured securely
+  # In production, this should be configured via environment variable or config
+  # In development, generates and persists a key in ~/.bpy_mcp/macaroon_secret
   defp get_or_create_secret_key do
-    Application.get_env(:bpy_mcp, :macaroon_secret_key) ||
-      System.get_env("BPY_MCP_MACAROON_SECRET") ||
-      :crypto.strong_rand_bytes(32)
+    # First, try explicit configuration
+    case Application.get_env(:bpy_mcp, :macaroon_secret_key) do
+      nil ->
+        # Try environment variable
+        case System.get_env("BPY_MCP_MACAROON_SECRET") do
+          nil ->
+            # Generate and persist a key for development
+            secret_file = Path.join(System.user_home!(), ".bpy_mcp/macaroon_secret")
+            secret_dir = Path.dirname(secret_file)
+            
+            # Ensure directory exists
+            File.mkdir_p!(secret_dir)
+            
+            # Read existing or generate new secret
+            case File.read(secret_file) do
+              {:ok, existing_secret} when byte_size(existing_secret) == 32 ->
+                existing_secret
+              
+              _ ->
+                # Generate new secret
+                secret = :crypto.strong_rand_bytes(32)
+                File.write!(secret_file, secret, [:binary, :exclusive])
+                secret
+            end
+          
+          env_secret ->
+            env_secret
+        end
+      
+      configured_secret when is_binary(configured_secret) ->
+        configured_secret
+      
+      _ ->
+        # Fallback to random (non-persistent)
+        :crypto.strong_rand_bytes(32)
+    end
   end
 end
 

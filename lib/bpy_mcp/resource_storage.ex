@@ -53,29 +53,38 @@ defmodule BpyMcp.ResourceStorage do
       
       data when is_binary(data) ->
         # Create temporary file for AriaStorage
-        temp_file = create_temp_file(scene_id, data)
+        temp_file_result = create_temp_file(scene_id, data)
         
-        # Store using AriaStorage with chunking
-        case AriaStorage.process_file(temp_file, 
-          backend: :local,
-          compression: compression,
-          chunk_options: [avg_size: 64 * 1024]
-        ) do
-          {:ok, %{chunks: _chunks, index: _index, storage_result: storage_result}} ->
-            # Clean up temp file
-            File.rm(temp_file)
-            
-            # Store metadata linking scene_id to storage_ref
-            _storage_ref = Map.get(storage_result, :chunk_id) || 
-              Map.get(storage_result, :file_ref) || 
-              "#{scene_id}_#{System.unique_integer([:positive])}"
-            
-            # Return scene_id as the storage reference for easier lookup
-            {:ok, scene_id}
-          
+        case temp_file_result do
           {:error, reason} ->
-            File.rm(temp_file)
-            {:error, "AriaStorage failed: #{inspect(reason)}"}
+            {:error, reason}
+          
+          temp_file when is_binary(temp_file) ->
+            try do
+              # Store using AriaStorage with chunking
+              case AriaStorage.process_file(temp_file, 
+                backend: :local,
+                compression: compression,
+                chunk_options: [avg_size: 64 * 1024]
+              ) do
+                {:ok, %{chunks: _chunks, index: _index, storage_result: storage_result}} ->
+                  # Store metadata linking scene_id to storage_ref
+                  _storage_ref = Map.get(storage_result, :chunk_id) || 
+                    Map.get(storage_result, :file_ref) || 
+                    "#{scene_id}_#{System.unique_integer([:positive])}"
+                  
+                  # Return scene_id as the storage reference for easier lookup
+                  {:ok, scene_id}
+                
+                {:error, reason} ->
+                  {:error, "AriaStorage failed: #{inspect(reason)}"}
+              end
+            after
+              # Always clean up temp file, even on error
+              if File.exists?(temp_file) do
+                File.rm(temp_file)
+              end
+            end
         end
       
       _ ->
@@ -158,10 +167,50 @@ defmodule BpyMcp.ResourceStorage do
   - `{:error, reason}` - Error if deletion fails
   """
   @spec delete_scene_resource(String.t()) :: :ok | {:error, String.t()}
-  def delete_scene_resource(_storage_ref) do
-    # AriaStorage doesn't have a direct delete API in the main module
-    # This would need to be implemented based on the chunk store being used
-    {:error, "Delete not yet implemented - requires chunk store access"}
+  def delete_scene_resource(storage_ref) do
+    # AriaStorage uses Waffle for chunk storage
+    # The storage_ref might be a chunk_id or file_ref
+    # We need to delete through the chunk store interface
+    # Since we're using local backend, we can try to delete directly via file system
+    # or use AriaStorage's delete_chunk if we have access to the chunk store
+    
+    # Try to use AriaStorage.delete_chunk which requires a chunk store struct
+    # For now, we'll attempt deletion via the file system since we're using local storage
+    storage_dir = Path.join(System.user_home!(), ".bpy_mcp/storage")
+    chunk_path = Path.join(storage_dir, "chunks")
+    
+    # Try to find and delete the chunk file
+    # Chunks are stored in subdirectories based on prefix
+    case find_and_delete_chunk_file(chunk_path, storage_ref) do
+      :ok -> :ok
+      {:error, :not_found} ->
+        # If file deletion fails, the resource might not exist or be stored differently
+        {:error, "Resource not found or delete not fully implemented for storage reference format"}
+      {:error, reason} ->
+        {:error, "Failed to delete resource: #{inspect(reason)}"}
+    end
+  end
+  
+  # Helper to find and delete chunk file
+  defp find_and_delete_chunk_file(chunk_dir, chunk_id) when is_binary(chunk_id) do
+    # Chunks are stored with 2-character prefix directories
+    if String.length(chunk_id) >= 2 do
+      prefix = String.slice(chunk_id, 0, 2)
+      prefix_dir = Path.join(chunk_dir, prefix)
+      chunk_filename = "#{chunk_id}.cacnk"
+      chunk_file = Path.join(prefix_dir, chunk_filename)
+      
+      if File.exists?(chunk_file) do
+        case File.rm(chunk_file) do
+          :ok -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+      else
+        {:error, :not_found}
+      end
+    else
+      {:error, :invalid_chunk_id}
+    end
   end
 
   # Private helpers

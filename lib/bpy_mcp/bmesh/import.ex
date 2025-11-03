@@ -85,8 +85,8 @@ for mesh_data in meshes:
             # Store edge by vertex pair (sorted for consistent lookup)
             edge_key = tuple(sorted([v1_idx, v2_idx]))
             if edge_key not in edge_map:
-                v1 = bm.verts[v1_idx]
-                v2 = bm.verts[v2_idx]
+            v1 = bm.verts[v1_idx]
+            v2 = bm.verts[v2_idx]
                 edge = bm.edges.new([v1, v2])
                 edge_map[edge_key] = edge
         
@@ -96,17 +96,17 @@ for mesh_data in meshes:
         # Create faces using bmesh.ops - this properly sets up loops
         face_vertices_list = faces_data.get('vertices', [])
         face_offsets = faces_data.get('offsets', [])
-        
+
         if len(face_offsets) == 0:
             face_offsets = [0]
-        
+
         # If we have proper offsets, use them to reconstruct faces
         if len(face_offsets) > 1:
-            face_start = 0
-            for face_end in face_offsets[1:]:
+        face_start = 0
+        for face_end in face_offsets[1:]:
                 face_vert_indices = face_vertices_list[face_start:face_end]
                 if len(face_vert_indices) >= 3:  # Face needs at least 3 vertices
-                    face_verts = [bm.verts[i] for i in face_vert_indices]
+            face_verts = [bm.verts[i] for i in face_vert_indices]
                     # Use bmesh.ops to create face - this properly sets up all loops
                     try:
                         face = bm.faces.new(face_verts)
@@ -117,7 +117,7 @@ for mesh_data in meshes:
                     except ValueError as e:
                         # Face creation failed (e.g., duplicate face)
                         print(f"Warning: Failed to create face with vertices {face_vert_indices}: {e}")
-                face_start = face_end
+            face_start = face_end
         else:
             # Fallback: try to create faces from vertex list
             # This is a simple heuristic - assumes triangular faces
@@ -139,7 +139,7 @@ for mesh_data in meshes:
         bm.verts.ensure_lookup_table()
         bm.edges.ensure_lookup_table()
         bm.faces.ensure_lookup_table()
-        
+
         # Load BMesh into mesh
         bm.to_mesh(mesh)
         mesh.update()
