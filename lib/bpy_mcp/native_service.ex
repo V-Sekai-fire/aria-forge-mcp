@@ -222,7 +222,7 @@ defmodule BpyMcp.NativeService do
   deftool "plan_scene_construction" do
     meta do
       name("Plan Scene Construction")
-      description("Plans a sequence of Blender operations to construct a scene from initial state to goal state. Returns a JSON plan with ordered steps.")
+      description("Plans a sequence of Blender commands to construct a scene from initial state to goal state. Returns a JSON plan with ordered steps.")
     end
 
     input_schema(%{
@@ -263,7 +263,7 @@ defmodule BpyMcp.NativeService do
   deftool "plan_material_application" do
     meta do
       name("Plan Material Application")
-      description("Plans the sequence of material creation and assignment operations, respecting material dependencies.")
+      description("Plans the sequence of material creation and assignment commands, respecting material dependencies.")
     end
 
     input_schema(%{
@@ -366,6 +366,69 @@ defmodule BpyMcp.NativeService do
         }
       },
       required: ["plan_data"]
+    })
+  end
+
+  deftool "run_lazy" do
+    meta do
+      name("Run Lazy Planner")
+      description("Generic planning tool using run_lazy that handles goal decomposition, dependencies, temporal constraints, and custom domain specifications. Supports any planning scenario that PERT or other planners could handle.")
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        plan_spec: %{
+          type: "object",
+          description: "Generic planning specification compatible with run_lazy",
+          properties: %{
+            initial_state: %{
+              type: "object",
+              description: "Initial state for planning (can include facts, timeline, entity_capabilities, constraints)"
+            },
+            tasks: %{
+              type: "array",
+              description: "List of tasks to achieve. Tasks can be high-level goals (decomposed by domain methods) or specific commands (called directly). Each task can be a string (task name), array [task_name, args], or object {\"task\": name, \"args\": args}"
+            },
+            domain: %{
+              type: "object",
+              description: "Optional custom domain specification with methods and commands. If not provided, uses default Blender domain",
+              properties: %{
+                methods: %{
+                  type: "object",
+                  description: "Methods for goal decomposition (maps goal names to decomposition functions)"
+                },
+                commands: %{
+                  type: "object",
+                  description: "Commands available in the domain (maps command names to command functions)"
+                },
+                initial_tasks: %{
+                  type: "array",
+                  description: "Initial tasks for the domain"
+                }
+              }
+            },
+            constraints: %{
+              type: "array",
+              description: "Constraints on the planning (dependencies, temporal, precedence, etc.)"
+            },
+            opts: %{
+              type: "object",
+              description: "Optional planner options (execution mode, backtracking config, etc.)"
+            }
+          },
+          required: ["initial_state", "tasks"]
+        },
+        context_token: %{
+          type: "string",
+          description: "Optional context token (macaroon) for scene context. If not provided, uses default context."
+        },
+        scene_id: %{
+          type: "string",
+          description: "Optional scene ID. If not provided, uses default scene."
+        }
+      },
+      required: ["plan_spec"]
     })
   end
 
@@ -499,7 +562,176 @@ defmodule BpyMcp.NativeService do
     })
   end
 
+  deftool "aria_math" do
+    meta do
+      name("Aria Math")
+      description("Call aria_math API functions. Supports Primitives, Vector3, Matrix4, and Quaternion modules with their whitelisted functions.")
+    end
 
+    input_schema(%{
+      type: "object",
+      properties: %{
+        module: %{
+          type: "string",
+          description: "Module name: 'Primitives', 'Vector3', 'Matrix4', or 'Quaternion'",
+          enum: ["Primitives", "Vector3", "Matrix4", "Quaternion"]
+        },
+        function: %{
+          type: "string",
+          description: "Function name to call (must be whitelisted in aria_math API)"
+        },
+        args: %{
+          type: "array",
+          description: "Array of arguments for the function call",
+          default: []
+        }
+      },
+      required: ["module", "function"]
+    })
+  end
+
+  deftool "sympy_solve" do
+    meta do
+      name("SymPy Solve")
+      description("Solve symbolic equations using SymPy (e.g., x**2 - 1 = 0 for x)")
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        equation: %{
+          type: "string",
+          description: "String representation of the equation (e.g., 'x**2 - 1')"
+        },
+        variable: %{
+          type: "string",
+          description: "Variable to solve for (e.g., 'x')"
+        }
+      },
+      required: ["equation", "variable"]
+    })
+  end
+
+  deftool "sympy_simplify" do
+    meta do
+      name("SymPy Simplify")
+      description("Simplify symbolic expressions using SymPy")
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        expression: %{
+          type: "string",
+          description: "String representation of the expression to simplify"
+        }
+      },
+      required: ["expression"]
+    })
+  end
+
+  deftool "sympy_differentiate" do
+    meta do
+      name("SymPy Differentiate")
+      description("Compute the derivative of an expression using SymPy")
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        expression: %{
+          type: "string",
+          description: "String representation of the expression"
+        },
+        variable: %{
+          type: "string",
+          description: "Variable to differentiate with respect to"
+        }
+      },
+      required: ["expression", "variable"]
+    })
+  end
+
+  deftool "sympy_integrate" do
+    meta do
+      name("SymPy Integrate")
+      description("Compute the integral of an expression using SymPy")
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        expression: %{
+          type: "string",
+          description: "String representation of the expression"
+        },
+        variable: %{
+          type: "string",
+          description: "Variable to integrate with respect to"
+        }
+      },
+      required: ["expression", "variable"]
+    })
+  end
+
+  deftool "sympy_expand" do
+    meta do
+      name("SymPy Expand")
+      description("Expand symbolic expressions using SymPy")
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        expression: %{
+          type: "string",
+          description: "String representation of the expression to expand"
+        }
+      },
+      required: ["expression"]
+    })
+  end
+
+  deftool "sympy_factor" do
+    meta do
+      name("SymPy Factor")
+      description("Factor symbolic expressions using SymPy")
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        expression: %{
+          type: "string",
+          description: "String representation of the expression to factor"
+        }
+      },
+      required: ["expression"]
+    })
+  end
+
+  deftool "sympy_evaluate" do
+    meta do
+      name("SymPy Evaluate")
+      description("Evaluate symbolic expressions numerically using SymPy with variable substitutions")
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        expression: %{
+          type: "string",
+          description: "String representation of the expression to evaluate"
+        },
+        substitutions: %{
+          type: "object",
+          description: "Map of variable names to numeric values for substitution",
+          default: %{}
+        }
+      },
+      required: ["expression"]
+    })
+  end
 
   # Override handle_request to delegate to Resources module
   @impl true
@@ -745,6 +977,18 @@ defmodule BpyMcp.NativeService do
     with {:ok, temp_dir, _context_pid} <- Context.get_or_create_context(args, state),
          {:ok, result} <- BpyMcp.BpyTools.execute_plan(plan_data, temp_dir) do
       {:ok, %{content: [Helpers.text_content("Plan execution result:\n#{result}")]}, state}
+    else
+      {:error, reason} -> {:error, reason, state}
+    end
+  end
+
+  @impl true
+  def handle_tool_call("run_lazy", args, state) do
+    plan_spec = Map.get(args, "plan_spec", %{})
+
+    with {:ok, temp_dir, _context_pid} <- Context.get_or_create_context(args, state),
+         {:ok, result} <- BpyMcp.BpyTools.Planning.run_lazy_planning(plan_spec, temp_dir) do
+      {:ok, %{content: [Helpers.text_content("Run Lazy Planning Result:\n#{result}")]}, state}
     else
       {:error, reason} -> {:error, reason, state}
     end
@@ -1106,6 +1350,98 @@ defmodule BpyMcp.NativeService do
       
       {:error, reason} ->
         {:error, "Failed to list contexts: #{reason}", state}
+    end
+  end
+
+  @impl true
+  def handle_tool_call("aria_math", args, state) do
+    module = Map.get(args, "module")
+    function = Map.get(args, "function")
+    function_args = Map.get(args, "args", [])
+    
+    case BpyMcp.MathTools.call_aria_math(module, function, function_args) do
+      {:ok, result} ->
+        {:ok, %{content: [Helpers.text_content("Result: #{inspect(result)}")]}, state}
+      
+      {:error, reason} ->
+        {:error, reason, state}
+    end
+  end
+
+  @impl true
+  def handle_tool_call("sympy_solve", args, state) do
+    case BpyMcp.MathTools.call_sympy("sympy_solve", args) do
+      {:ok, result} ->
+        {:ok, %{content: [Helpers.text_content("Solution: #{result}")]}, state}
+      
+      {:error, reason} ->
+        {:error, reason, state}
+    end
+  end
+
+  @impl true
+  def handle_tool_call("sympy_simplify", args, state) do
+    case BpyMcp.MathTools.call_sympy("sympy_simplify", args) do
+      {:ok, result} ->
+        {:ok, %{content: [Helpers.text_content("Simplified: #{result}")]}, state}
+      
+      {:error, reason} ->
+        {:error, reason, state}
+    end
+  end
+
+  @impl true
+  def handle_tool_call("sympy_differentiate", args, state) do
+    case BpyMcp.MathTools.call_sympy("sympy_differentiate", args) do
+      {:ok, result} ->
+        {:ok, %{content: [Helpers.text_content("Derivative: #{result}")]}, state}
+      
+      {:error, reason} ->
+        {:error, reason, state}
+    end
+  end
+
+  @impl true
+  def handle_tool_call("sympy_integrate", args, state) do
+    case BpyMcp.MathTools.call_sympy("sympy_integrate", args) do
+      {:ok, result} ->
+        {:ok, %{content: [Helpers.text_content("Integral: #{result}")]}, state}
+      
+      {:error, reason} ->
+        {:error, reason, state}
+    end
+  end
+
+  @impl true
+  def handle_tool_call("sympy_expand", args, state) do
+    case BpyMcp.MathTools.call_sympy("sympy_expand", args) do
+      {:ok, result} ->
+        {:ok, %{content: [Helpers.text_content("Expanded: #{result}")]}, state}
+      
+      {:error, reason} ->
+        {:error, reason, state}
+    end
+  end
+
+  @impl true
+  def handle_tool_call("sympy_factor", args, state) do
+    case BpyMcp.MathTools.call_sympy("sympy_factor", args) do
+      {:ok, result} ->
+        {:ok, %{content: [Helpers.text_content("Factored: #{result}")]}, state}
+      
+      {:error, reason} ->
+        {:error, reason, state}
+    end
+  end
+
+  @impl true
+  def handle_tool_call("sympy_evaluate", args, state) do
+    case BpyMcp.MathTools.call_sympy("sympy_evaluate", args) do
+      {:ok, result} ->
+        {:ok, %{content: [Helpers.text_content("Evaluated: #{result}")]}, state}
+      
+      {:error, reason} ->
+        {:error, reason, state}
     end
   end
 

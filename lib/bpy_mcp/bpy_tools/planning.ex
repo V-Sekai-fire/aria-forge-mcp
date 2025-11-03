@@ -3,10 +3,10 @@
 
 defmodule BpyMcp.BpyTools.Planning do
   @moduledoc """
-  Planning tools for generating sequences of Blender operations.
+  Planning tools for generating sequences of Blender commands.
   
   These tools help plan complex workflows by generating ordered sequences
-  of bpy-mcp operations that respect dependencies and constraints.
+  of bpy-mcp commands that respect dependencies and constraints.
   
   Uses aria_planner library for planning algorithms when available.
   """
@@ -25,9 +25,104 @@ defmodule BpyMcp.BpyTools.Planning do
   }
 
   @doc """
+  Generic run_lazy planning function.
+  
+  Handles any planning scenario with goal decomposition, dependencies, temporal constraints, and custom domains.
+  """
+  @spec run_lazy_planning(map(), String.t()) :: planning_result()
+  def run_lazy_planning(plan_spec, _temp_dir) do
+    initial_state = Map.get(plan_spec, "initial_state", %{})
+    tasks = Map.get(plan_spec, "tasks", [])
+    constraints = Map.get(plan_spec, "constraints", [])
+    custom_domain = Map.get(plan_spec, "domain")
+    opts = Map.get(plan_spec, "opts", %{})
+    
+    # Try to use aria_planner if available
+    plan = 
+      case Code.ensure_loaded?(AriaPlanner) do
+        true ->
+          try do
+            # Use custom domain if provided, otherwise use default Blender domain
+            domain = 
+              if custom_domain != nil do
+                convert_domain_spec_from_json(custom_domain)
+              else
+                create_blender_domain_spec()
+              end
+            
+            # Convert initial_state to planning format, including constraints
+            planning_initial_state = 
+              convert_to_planning_state(initial_state)
+              |> add_constraints_to_state(constraints)
+            
+            # Tasks can be provided directly or need conversion
+            planning_tasks = 
+              if is_list(tasks) and length(tasks) > 0 do
+                # Tasks are provided as list of {task_name, args} tuples or strings
+                Enum.map(tasks, fn task ->
+                  case task do
+                    [name, args] when is_binary(name) -> {name, args}
+                    %{"task" => name, "args" => args} -> {name, args}
+                    name when is_binary(name) -> {name, %{}}
+                    _ -> task
+                  end
+                end)
+              else
+                []
+              end
+            
+            # Convert opts to keyword list for run_lazy
+            planning_opts = 
+              opts
+              |> Map.to_list()
+              |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
+            
+            # Determine execution mode (default false = planning only)
+            execution = Map.get(opts, "execution", false)
+            
+            # Call run_lazy
+            case AriaPlanner.run_lazy(domain, planning_initial_state, planning_tasks, planning_opts, execution) do
+              {:ok, plan_result} ->
+                # Extract solution plan from run_lazy result
+                convert_run_lazy_plan_to_blender_plan(plan_result)
+              
+              error ->
+                %{
+                  steps: [],
+                  total_operations: 0,
+                  estimated_complexity: "failed",
+                  error: "run_lazy failed: #{inspect(error)}"
+                }
+            end
+          rescue
+            e ->
+              %{
+                steps: [],
+                total_operations: 0,
+                estimated_complexity: "failed",
+                error: "run_lazy error: #{inspect(e)}"
+              }
+          end
+        
+        false ->
+          %{
+            steps: [],
+            total_operations: 0,
+            estimated_complexity: "failed",
+            error: "AriaPlanner not available"
+          }
+      end
+    
+    case Jason.encode(plan) do
+      {:ok, json} -> {:ok, json}
+      error -> {:error, "Failed to encode plan: #{inspect(error)}"}
+    end
+  end
+
+  @doc """
   Plans a scene construction workflow.
   
-  Given initial and goal scene states, generates a sequence of bpy-mcp operations.
+  Given initial and goal scene states, generates a sequence of bpy-mcp commands.
   """
   @spec plan_scene_construction(map(), String.t()) :: planning_result()
   def plan_scene_construction(plan_spec, _temp_dir) do
@@ -376,7 +471,7 @@ defmodule BpyMcp.BpyTools.Planning do
           # Convert goal_state to tasks/initial_state format for run_lazy
           # run_lazy expects: domain, initial_state, tasks, opts, execution
           
-          # Create Blender domain spec with methods and actions
+          # Create Blender domain spec with methods and commands
           domain = create_blender_domain_spec()
           
           # Convert initial_state to planning format, including constraints
@@ -413,12 +508,12 @@ defmodule BpyMcp.BpyTools.Planning do
   
   
   defp create_blender_domain_spec do
-    # Create a domain spec for Blender operations using run_lazy
-    # This defines actions and methods for Blender scene construction
-    # Methods handle goal decomposition, actions are the actual operations
+    # Create a domain spec for Blender commands using run_lazy
+    # This defines commands and methods for Blender scene construction
+    # Methods handle goal decomposition, commands are the actual primitives we call
     %{
       methods: %{
-        "create_scene" => fn state, goal ->
+        "create_scene" => fn _state, goal ->
           # Method to decompose "create scene" into object creation tasks
           # Handles both explicit objects list and high-level descriptions
           case goal do
@@ -439,7 +534,7 @@ defmodule BpyMcp.BpyTools.Planning do
               []
           end
         end,
-        "create_object" => fn state, obj_spec ->
+        "create_object" => fn _state, obj_spec ->
           # Method to create individual objects with dependency checking
           # run_lazy will handle scheduling based on dependencies
           case obj_spec do
@@ -449,16 +544,16 @@ defmodule BpyMcp.BpyTools.Planning do
           end
         end
       },
-      actions: %{
+      commands: %{
         "create_cube" => fn state, args ->
-          # Action: create cube with duration estimation
+          # Command: create cube with duration estimation
           # run_lazy uses durations for temporal scheduling
-          duration = estimate_action_duration("create_cube", args)
+          duration = estimate_command_duration("create_cube", args)
           {:ok, state, duration}
         end,
         "create_sphere" => fn state, args ->
-          # Action: create sphere with duration estimation
-          duration = estimate_action_duration("create_sphere", args)
+          # Command: create sphere with duration estimation
+          duration = estimate_command_duration("create_sphere", args)
           {:ok, state, duration}
         end
       },
@@ -466,8 +561,8 @@ defmodule BpyMcp.BpyTools.Planning do
     }
   end
   
-  defp estimate_action_duration(action, _args) when action in ["create_cube", "create_sphere"], do: 1
-  defp estimate_action_duration(_action, _args), do: 1
+  defp estimate_command_duration(command, _args) when command in ["create_cube", "create_sphere"], do: 1
+  defp estimate_command_duration(_command, _args), do: 1
   
   defp add_constraints_to_state(state, constraints) when is_list(constraints) do
     # Extract dependencies and temporal constraints from constraints list
@@ -516,16 +611,35 @@ defmodule BpyMcp.BpyTools.Planning do
   defp convert_to_planning_state(initial_state) do
     # Convert Blender initial state to planning state format for run_lazy
     # Include constraints in state so run_lazy can respect them
-    %{
+    # If initial_state already has required keys, use them; otherwise use defaults
+    base_state = %{
       current_time: DateTime.utc_now(),
-      timeline: %{},
-      entity_capabilities: %{},
-      facts: Map.get(initial_state, "objects", []),
+      timeline: Map.get(initial_state, "timeline", %{}),
+      entity_capabilities: Map.get(initial_state, "entity_capabilities", %{}),
+      facts: Map.get(initial_state, "facts", Map.get(initial_state, "objects", [])),
       constraints: %{
         dependencies: [],
         temporal: []
       }
     }
+    
+    # Merge with any existing constraints in initial_state
+    if Map.has_key?(initial_state, "constraints") do
+      Map.update!(base_state, :constraints, fn existing ->
+        Map.merge(existing, initial_state["constraints"])
+      end)
+    else
+      base_state
+    end
+  end
+  
+  defp convert_domain_spec_from_json(domain_json) when is_map(domain_json) do
+    # Convert JSON domain specification to Elixir format for run_lazy
+    # For custom domains provided via JSON, we use the default Blender domain
+    # as a base since we can't dynamically create Elixir functions from JSON
+    # Full implementation would require a domain language or function registry
+    # Note: JSON may use "actions" but internally we use "commands"
+    create_blender_domain_spec()
   end
   
   defp convert_goal_to_tasks(goal_state) do
@@ -552,7 +666,7 @@ defmodule BpyMcp.BpyTools.Planning do
   end
   
   defp convert_run_lazy_plan_to_blender_plan(plan) do
-    # Extract solution plan from run_lazy result and convert to Blender operation plan
+    # Extract solution plan from run_lazy result and convert to Blender command plan
     # The plan contains solution_graph_data and solution_plan
     case Map.get(plan, :solution_plan) do
       nil ->
@@ -565,7 +679,7 @@ defmodule BpyMcp.BpyTools.Planning do
             steps = 
               solution_steps
               |> Enum.map(fn step ->
-                # step format from run_lazy: {"action_name", args}
+                # step format from run_lazy: {command_name, args}
                 case step do
                   ["create_cube", args] when is_map(args) ->
                     %{

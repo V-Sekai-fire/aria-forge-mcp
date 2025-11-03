@@ -30,7 +30,7 @@ defmodule BpyMcp.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ex_mcp, git: "https://github.com/azmaveth/ex_mcp.git", branch: "master"},
+      {:ex_mcp, git: "https://github.com/azmaveth/ex_mcp.git", branch: "master", override: true},
       {:jason, "~> 1.4"},
       {:pythonx, "~> 0.4.0", runtime: false},
       {:briefly, "~> 0.5.1"},
@@ -41,6 +41,7 @@ defmodule BpyMcp.MixProject do
       {:aria_math, git: "https://github.com/V-Sekai-fire/aria-math.git"},
       {:aria_core, git: "https://github.com/V-Sekai-fire/aria-core.git"},
       {:aria_planner, git: "https://github.com/V-Sekai-fire/aria-planner.git", override: true},
+      {:sympy_mcp, git: "https://github.com/V-Sekai-fire/sympy-mcp.git", override: true},
       {:dialyxir, "~> 1.4.6", only: [:dev], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
