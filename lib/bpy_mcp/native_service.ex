@@ -11,6 +11,7 @@ defmodule BpyMcp.NativeService do
   alias BpyMcp.NativeService.SchemaConverter
   alias BpyMcp.NativeService.Resources
   alias BpyMcp.NativeService.Helpers
+  alias BpyMcp.NativeService.Prompts
 
   # Suppress warnings from ex_mcp DSL generated code
   @compile {:no_warn_undefined, :no_warn_pattern}
@@ -509,6 +510,56 @@ defmodule BpyMcp.NativeService do
   @impl true
   def handle_request(%{"method" => "resources/read"} = request, params, state) do
     Resources.handle_resources_read(request, params, state)
+  end
+
+  # Handle prompts/list and prompts/get for hard-coded seed prompts
+  @impl true
+  def handle_request(%{"method" => "prompts/list"} = request, _params, state) do
+    prompts = Prompts.list_prompts()
+    
+    id = Map.get(request, "id", nil)
+    response = 
+      %{
+        "jsonrpc" => "2.0",
+        "result" => %{
+          "prompts" => prompts
+        }
+      }
+      |> then(fn r -> if id, do: Map.put(r, "id", id), else: r end)
+    
+    {:reply, response, state}
+  end
+
+  @impl true
+  def handle_request(%{"method" => "prompts/get"} = request, params, state) do
+    prompt_name = Map.get(params, "name", "")
+    
+    case Prompts.get_prompt(prompt_name) do
+      {:ok, prompt} ->
+        id = Map.get(request, "id", nil)
+        response = 
+          %{
+            "jsonrpc" => "2.0",
+            "result" => prompt
+          }
+          |> then(fn r -> if id, do: Map.put(r, "id", id), else: r end)
+        
+        {:reply, response, state}
+      
+      {:error, reason} ->
+        id = Map.get(request, "id", nil)
+        response = 
+          %{
+            "jsonrpc" => "2.0",
+            "error" => %{
+              "code" => -32602,
+              "message" => "Prompt not found: #{reason}"
+            }
+          }
+          |> then(fn r -> if id, do: Map.put(r, "id", id), else: r end)
+        
+        {:reply, response, state}
+    end
   end
 
   # Override handle_request to intercept tools/list and convert input_schema to inputSchema

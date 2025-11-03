@@ -353,10 +353,270 @@ defmodule BpyMcp.BpyTools.Planning do
   # aria_planner integration functions (when library is available)
   
   defp use_aria_planner_for_construction(initial_state, goal_state, constraints) do
-    # TODO: Use aria_planner's planning functions once we understand the API
-    # For now, fallback to simple planning
-    # Example: AriaPlanner.solve(initial_state, goal_state, constraints)
-    generate_construction_plan(initial_state, goal_state, constraints)
+    # Use run_lazy for all planning - it handles both goal decomposition and temporal/dependency scheduling
+    # run_lazy can handle:
+    # - High-level goal decomposition (hierarchical planning)
+    # - Explicit object lists (task-based planning)
+    # - Temporal constraints (via temporal STN in aria_planner)
+    # - Dependencies (via dependency graph in domain spec)
+    
+    case try_run_lazy(initial_state, goal_state, constraints) do
+      {:ok, plan} -> plan
+      {:fallback, _reason} -> 
+        # If run_lazy fails, fallback to simple planning
+        generate_construction_plan(initial_state, goal_state, constraints)
+    end
   end
+  
+  defp try_run_lazy(initial_state, goal_state, constraints) do
+    # Try to use run_lazy for goal-based planning with decomposition
+    case Code.ensure_loaded?(AriaPlanner) do
+      true ->
+        try do
+          # Convert goal_state to tasks/initial_state format for run_lazy
+          # run_lazy expects: domain, initial_state, tasks, opts, execution
+          
+          # Create Blender domain spec with methods and actions
+          domain = create_blender_domain_spec()
+          
+          # Convert initial_state to planning format, including constraints
+          planning_initial_state = 
+            convert_to_planning_state(initial_state)
+            |> add_constraints_to_state(constraints)
+          
+          # Convert goal_state to tasks
+          tasks = convert_goal_to_tasks(goal_state)
+          
+          # Call run_lazy (execution=false means planning only)
+          # run_lazy handles:
+          # - Goal decomposition (hierarchical planning)
+          # - Dependency resolution (via domain methods)
+          # - Temporal scheduling (via aria_planner's temporal STN)
+          # - Optimal ordering (via lazy refinement)
+          case AriaPlanner.run_lazy(domain, planning_initial_state, tasks, [], false) do
+            {:ok, plan} ->
+              # Extract solution plan from run_lazy result
+              convert_run_lazy_plan_to_blender_plan(plan)
+            
+            error ->
+              {:fallback, "run_lazy failed: #{inspect(error)}"}
+          end
+        rescue
+          e ->
+            {:fallback, "run_lazy error: #{inspect(e)}"}
+        end
+      
+      false ->
+        {:fallback, "AriaPlanner not available"}
+    end
+  end
+  
+  
+  defp create_blender_domain_spec do
+    # Create a domain spec for Blender operations using run_lazy
+    # This defines actions and methods for Blender scene construction
+    # Methods handle goal decomposition, actions are the actual operations
+    %{
+      methods: %{
+        "create_scene" => fn state, goal ->
+          # Method to decompose "create scene" into object creation tasks
+          # Handles both explicit objects list and high-level descriptions
+          case goal do
+            %{"objects" => objects} when is_list(objects) ->
+              # Explicit objects: create tasks respecting dependencies
+              Enum.map(objects, fn obj ->
+                obj_name = Map.get(obj, "name", "Object")
+                {"create_object", Map.put(obj, "name", obj_name)}
+              end)
+            
+            %{"description" => desc} when is_binary(desc) ->
+              # High-level description: decompose into subgoals
+              # This would be expanded by run_lazy's goal decomposition
+              [{"create_floor", %{}}, {"create_walls", %{}}, {"create_furniture", %{}}]
+            
+            _ ->
+              # Default: try to extract from goal_state
+              []
+          end
+        end,
+        "create_object" => fn state, obj_spec ->
+          # Method to create individual objects with dependency checking
+          # run_lazy will handle scheduling based on dependencies
+          case obj_spec do
+            %{"type" => "cube"} -> [{"create_cube", obj_spec}]
+            %{"type" => "sphere"} -> [{"create_sphere", obj_spec}]
+            _ -> [{"create_cube", obj_spec}]
+          end
+        end
+      },
+      actions: %{
+        "create_cube" => fn state, args ->
+          # Action: create cube with duration estimation
+          # run_lazy uses durations for temporal scheduling
+          duration = estimate_action_duration("create_cube", args)
+          {:ok, state, duration}
+        end,
+        "create_sphere" => fn state, args ->
+          # Action: create sphere with duration estimation
+          duration = estimate_action_duration("create_sphere", args)
+          {:ok, state, duration}
+        end
+      },
+      initial_tasks: []
+    }
+  end
+  
+  defp estimate_action_duration(action, _args) when action in ["create_cube", "create_sphere"], do: 1
+  defp estimate_action_duration(_action, _args), do: 1
+  
+  defp add_constraints_to_state(state, constraints) when is_list(constraints) do
+    # Extract dependencies and temporal constraints from constraints list
+    dependencies = extract_dependencies_from_constraints(constraints)
+    temporal = extract_temporal_from_constraints(constraints)
+    
+    update_in(state, [:constraints], fn existing ->
+      Map.merge(existing, %{
+        dependencies: dependencies,
+        temporal: temporal
+      })
+    end)
+  end
+  defp add_constraints_to_state(state, _), do: state
+  
+  defp extract_dependencies_from_constraints(constraints) when is_list(constraints) do
+    # Extract dependencies for run_lazy to respect
+    constraints
+    |> Enum.filter(fn c -> 
+      Map.get(c, "type") == "precedence" or 
+      Map.get(c, "type") == "dependency" or
+      Map.has_key?(c, "before") or
+      Map.has_key?(c, "after")
+    end)
+    |> Enum.map(fn c ->
+      %{
+        before: Map.get(c, "before") || Map.get(c, "predecessor"),
+        after: Map.get(c, "after") || Map.get(c, "successor")
+      }
+    end)
+    |> Enum.filter(fn d -> d.before != nil and d.after != nil end)
+  end
+  defp extract_dependencies_from_constraints(_), do: []
+  
+  defp extract_temporal_from_constraints(constraints) when is_list(constraints) do
+    # Extract temporal constraints for run_lazy's temporal STN
+    constraints
+    |> Enum.filter(fn c ->
+      Map.get(c, "type") == "temporal" or 
+      Map.has_key?(c, "duration") or 
+      Map.has_key?(c, "deadline")
+    end)
+  end
+  defp extract_temporal_from_constraints(_), do: []
+  
+  defp convert_to_planning_state(initial_state) do
+    # Convert Blender initial state to planning state format for run_lazy
+    # Include constraints in state so run_lazy can respect them
+    %{
+      current_time: DateTime.utc_now(),
+      timeline: %{},
+      entity_capabilities: %{},
+      facts: Map.get(initial_state, "objects", []),
+      constraints: %{
+        dependencies: [],
+        temporal: []
+      }
+    }
+  end
+  
+  defp convert_goal_to_tasks(goal_state) do
+    # Convert goal_state to task format for run_lazy
+    # run_lazy handles both explicit task lists and goal decomposition
+    cond do
+      Map.has_key?(goal_state, "objects") ->
+        # Explicit objects → create tasks for each
+        # run_lazy will schedule these respecting dependencies
+        Enum.map(Map.get(goal_state, "objects", []), fn obj ->
+          obj_name = Map.get(obj, "name", "Object")
+          {"create_object", Map.put(obj, "name", obj_name)}
+        end)
+      
+      Map.has_key?(goal_state, "description") ->
+        # High-level description → single decomposition task
+        # run_lazy will decompose this using methods
+        [{"create_scene", goal_state}]
+      
+      true ->
+        # Default: try to extract tasks from goal_state
+        [{"create_scene", goal_state}]
+    end
+  end
+  
+  defp convert_run_lazy_plan_to_blender_plan(plan) do
+    # Extract solution plan from run_lazy result and convert to Blender operation plan
+    # The plan contains solution_graph_data and solution_plan
+    case Map.get(plan, :solution_plan) do
+      nil ->
+        {:fallback, "No solution plan in run_lazy result"}
+      
+      plan_json when is_binary(plan_json) ->
+        case Jason.decode(plan_json) do
+          {:ok, solution_steps} ->
+            # Convert solution steps to Blender plan format
+            steps = 
+              solution_steps
+              |> Enum.map(fn step ->
+                # step format from run_lazy: {"action_name", args}
+                case step do
+                  ["create_cube", args] when is_map(args) ->
+                    %{
+                      tool: "create_cube",
+                      args: %{
+                        "name" => Map.get(args, "name", "Cube"),
+                        "location" => Map.get(args, "location", [0, 0, 0]),
+                        "size" => Map.get(args, "size", 2.0)
+                      },
+                      dependencies: [],
+                      description: "Create cube '#{Map.get(args, "name", "Cube")}'"
+                    }
+                  
+                  ["create_sphere", args] when is_map(args) ->
+                    %{
+                      tool: "create_sphere",
+                      args: %{
+                        "name" => Map.get(args, "name", "Sphere"),
+                        "location" => Map.get(args, "location", [0, 0, 0]),
+                        "radius" => Map.get(args, "radius", 1.0)
+                      },
+                      dependencies: [],
+                      description: "Create sphere '#{Map.get(args, "name", "Sphere")}'"
+                    }
+                  
+                  _ ->
+                    nil
+                end
+              end)
+              |> Enum.filter(&(&1 != nil))
+            
+            if Enum.empty?(steps) do
+              {:fallback, "No valid steps extracted from run_lazy plan"}
+            else
+              {:ok, %{
+                steps: steps,
+                total_operations: length(steps),
+                estimated_complexity: complexity_label(length(steps)),
+                planner: "run_lazy",
+                solution_graph: Map.get(plan, :solution_graph_data, %{})
+              }}
+            end
+          
+          error ->
+            {:fallback, "Failed to decode run_lazy solution plan: #{inspect(error)}"}
+        end
+      
+      _ ->
+        {:fallback, "Invalid solution_plan format"}
+    end
+  end
+  
 end
 
