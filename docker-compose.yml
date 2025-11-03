@@ -5,25 +5,22 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: runtime
+    platform: linux/amd64
     container_name: bpy-mcp-server
     environment:
       - MCP_STDIO=true
       - MIX_ENV=prod
+      - ELIXIR_ERL_OPTIONS=+fnu
     volumes:
+      # Mount source code
+      - .:/workspace:cached
       # Mount temporary directory for Blender operations
       - bpy_temp:/tmp
-    working_dir: /app
-    command: ["bin/bpy_mcp", "start"]
+    working_dir: /workspace
+    command: ["mix", "run", "-e", "BpyMcp.StdioServer.start_link([])"]
     stdin_open: true
     tty: true
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
 volumes:
   bpy_temp:

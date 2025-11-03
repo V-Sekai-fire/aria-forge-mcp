@@ -5,16 +5,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: base
     environment:
       - MIX_ENV=dev
       - MCP_STDIO=true
+      - ELIXIR_ERL_OPTIONS=+fnu
     volumes:
       # Mount source code for development
-      - .:/app:cached
+      - .:/workspace:cached
       # Mount mix dependencies for faster rebuilds
-      - mix_deps:/app/deps
-      - mix_build:/app/_build
+      - mix_deps:/workspace/deps
+      - mix_build:/workspace/_build
     # Override command for development - use stdio server directly
     command: ["mix", "run", "-e", "BpyMcp.StdioServer.start_link([])"]
     restart: "no"

@@ -106,6 +106,42 @@ The Docker setup uses a multi-stage build:
 
 This approach minimizes the final image size while ensuring reproducible builds.
 
+## Development
+
+This project includes a dev container configuration for a consistent development environment.
+
+### Using Dev Containers
+
+1. Ensure you have Docker and the Dev Containers extension for VS Code installed
+2. Open the project in VS Code
+3. When prompted, select "Reopen in Container" or use Command Palette: `Dev Containers: Reopen in Container`
+4. The container will automatically set up the complete development environment
+
+The dev container includes:
+- Elixir 1.17.3 with OTP 26
+- Pre-installed dependencies and Hex package manager
+- VS Code extensions for Elixir development
+- Proper Python environment with uv for Blender integration
+
+### Manual Setup
+
+If you prefer not to use dev containers, you can build and run the Docker container manually:
+
+```bash
+# Build the container
+docker build --platform linux/amd64 -t bpy-mcp .
+
+# Run with source mounting
+docker run --rm -it --platform linux/amd64 -v $(pwd):/workspace -w /workspace bpy-mcp bash
+```
+
+Inside the container:
+```bash
+mix deps.get
+mix compile
+mix run -e BpyMcp.StdioServer.start_link([])
+```
+
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at <https://hexdocs.pm/bpy_mcp>.

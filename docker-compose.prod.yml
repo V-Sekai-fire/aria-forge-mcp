@@ -5,18 +5,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: runtime
     container_name: bpy-mcp-prod
     environment:
       - MCP_STDIO=true
       - MIX_ENV=prod
+      - ELIXIR_ERL_OPTIONS=+fnu
     volumes:
       - bpy_temp:/tmp
       # Optional: Mount persistent data directory
-      - bpy_data:/app/data
+      - bpy_data:/workspace/data
+    working_dir: /workspace
     ports:
       - "4000:4000"
-    command: ["bin/bpy_mcp", "start"]
+    command: ["mix", "run", "-e", "BpyMcp.StdioServer.start_link([])"]
     stdin_open: true
     tty: true
     restart: unless-stopped

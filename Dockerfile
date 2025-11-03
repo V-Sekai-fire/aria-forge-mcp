@@ -1,30 +1,42 @@
-FROM almalinux:9 AS base
+FROM almalinux:9
 
-# Set environment variables
-ENV LANG=C.UTF-8
-ENV LC_ALL=C.UTF-8
+WORKDIR /workspace
 
 # Install system dependencies
-RUN dnf update -y && dnf install -y --allowerasing \
+RUN dnf update -y && dnf install -y \
     gcc g++ make git \
     python3 python3-devel python3-pip \
     openssl-devel \
     zlib-devel \
-    ncurses-devel \
-    wget \
-    curl \
-    ca-certificates \
     unzip \
+    wget \
+    which \
+    ca-certificates \
+    ncurses-devel \
+    glibc-locale-source \
     && dnf clean all && rm -rf /var/cache/dnf
 
-# Install Erlang from AlmaLinux repositories and Elixir manually
+# Install lazygit
+RUN cd /tmp && \
+    LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*') && \
+    curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz" && \
+    tar xf lazygit.tar.gz lazygit && \
+    install lazygit /usr/local/bin/ && \
+    rm lazygit.tar.gz lazygit
+
+# Set up UTF-8 locale
+RUN localedef -c -i en_US -f UTF-8 en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# Install Erlang/OTP 28
 RUN dnf install -y epel-release && \
-    dnf install -y erlang && \
+    dnf install -y erlang erlang-erl_interface && \
     dnf clean all
 
-# Install Elixir 1.19.2 from precompiled binaries (latest version)
+# Install Elixir 1.17.3 for OTP 26 (compatible with ex_mcp)
 RUN cd /tmp && \
-    curl -L https://github.com/elixir-lang/elixir/releases/download/v1.19.2/elixir-otp-27.zip -o elixir.zip && \
+    curl -L https://github.com/elixir-lang/elixir/releases/download/v1.17.3/elixir-otp-26.zip -o elixir.zip && \
     unzip elixir.zip && \
     mkdir -p /opt/elixir && \
     mv bin lib man /opt/elixir/ && \
@@ -32,78 +44,16 @@ RUN cd /tmp && \
 
 ENV PATH="/opt/elixir/bin:${PATH}"
 
-# Install Blender
-RUN dnf install -y blender && dnf clean all
+# Note: Blender will be installed via Pythonx/uv at runtime
+# This allows proper dependency management and avoids conflicts
 
-# Verify installations
-RUN elixir --version && \
-    erl -eval 'erlang:display(erlang:system_info(otp_release)), halt().' -noshell && \
-    blender --version
+# Create development user
+RUN useradd -m -s /bin/bash -G wheel bpyuser && \
+    echo "bpyuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# Builder stage - builds the release (sidecar that gets discarded)
-FROM base AS builder
-
-# Create build user
-RUN groupadd -r bpybuilder && useradd -r -g bpybuilder bpybuilder
-
-# Set working directory
-WORKDIR /build
-
-# Copy mix files first for better caching
-COPY mix.exs mix.lock ./
-
-# Change ownership
-RUN chown -R bpybuilder:bpybuilder /build
-USER bpybuilder
-
-# Install Hex and Rebar
-RUN mix local.hex --force && \
-    mix local.rebar --force
-
-# Get dependencies
-RUN mix deps.get --only prod
-
-# Copy source code
-COPY --chown=bpybuilder:bpybuilder . .
-
-# Build the application
-RUN mix compile --warnings-as-errors
-
-# Create production release
-RUN mix release --overwrite
-
-# Runtime stage - minimal image for running the release
-FROM almalinux:9 AS runtime
-
-# Set environment variables
-ENV LANG=C.UTF-8
-ENV LC_ALL=C.UTF-8
-ENV MIX_ENV=prod
-
-# Create non-root user for security
-RUN groupadd -r bpyuser && useradd -r -g bpyuser bpyuser
-
-# Install only runtime dependencies (minimal) - no Erlang/Elixir needed for release
-RUN dnf update -y && dnf install -y \
-    python3 \
-    ca-certificates \
-    && dnf clean all && rm -rf /var/cache/dnf
-
-# Set working directory
-WORKDIR /app
-
-# Copy the built release from builder stage (sidecar artifacts)
-COPY --from=builder --chown=bpyuser:bpyuser /build/_build/prod/rel/bpy_mcp /app
-
-# Switch to non-root user
 USER bpyuser
 
-# Expose port if HTTP server is used
-EXPOSE 4000
+# Install Hex non-interactively as bpyuser
+RUN mix local.hex --force
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:4000/health || exit 1
-
-# Default command - run the release
-CMD ["bin/bpy_mcp", "start"]
+ENV PATH="/home/bpyuser/.local/bin:${PATH}"

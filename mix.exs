@@ -8,7 +8,7 @@ defmodule BpyMcp.MixProject do
     [
       app: :bpy_mcp,
       version: "0.1.0",
-      elixir: "~> 1.19",
+      elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       releases: releases(),
       deps: deps(),
@@ -30,7 +30,7 @@ defmodule BpyMcp.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ex_mcp, git: "https://github.com/azmaveth/ex_mcp.git", ref: "46bc6fd050539b41bacd4d1409c23b1939c3728b"},
+      {:ex_mcp, git: "https://github.com/azmaveth/ex_mcp.git", branch: "master"},
       {:jason, "~> 1.4"},
       {:pythonx, "~> 0.4.0", runtime: false},
       {:briefly, "~> 0.5.1"},
