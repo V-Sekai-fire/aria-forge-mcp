@@ -47,7 +47,7 @@ defmodule AriaForge.MixProject do
       {:macfly, "~> 0.2.20"},
       {:plug, "~> 1.16"},
       {:plug_cowboy, "~> 2.7"},
-      {:aria_storage, git: "https://github.com/V-Sekai-fire/aria-storage.git"},
+      {:aria_storage, git: "https://github.com/V-Sekai-fire/aria-storage.git", override: true},
       {:aria_math, git: "https://github.com/V-Sekai-fire/aria-math.git"},
       {:aria_core, git: "https://github.com/V-Sekai-fire/aria-core.git"},
       {:aria_planner, git: "https://github.com/V-Sekai-fire/aria-planner.git", override: true},
