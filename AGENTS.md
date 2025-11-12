@@ -88,7 +88,7 @@ plan_spec = %{
     {"create_forge_scene", %{
       "objects" => [
         %{"type" => "cube", "name" => "Cube1", "location" => [0, 0, 0]},
-        %{"type" => "sphere", "name" => "Sphere1", "location" => [2, 0, 0]}
+        %{"type" => "sphere", "name" => "TaperedCapsule1", "location" => [2, 0, 0]}
       ]
     }}
   ],
@@ -177,7 +177,7 @@ Plans material application sequences with dependency handling.
 
 ```elixir
 plan_spec = %{
-  "objects" => ["Cube1", "Sphere1"],
+  "objects" => ["Cube1", "TaperedCapsule1"],
   "materials" => [
     %{"name" => "RedMaterial", "color" => [1.0, 0.0, 0.0, 1.0]},
     %{"name" => "BlueMaterial", "color" => [0.0, 0.0, 1.0, 1.0]}
@@ -198,7 +198,7 @@ Plans animation sequences with temporal constraints.
 plan_spec = %{
   "animations" => [
     %{"object" => "Cube1", "property" => "location", "value" => [1, 0, 0], "frame" => 10},
-    %{"object" => "Sphere1", "property" => "location", "value" => [2, 0, 0], "frame" => 20}
+    %{"object" => "TaperedCapsule1", "property" => "location", "value" => [2, 0, 0], "frame" => 20}
   ],
   "constraints" => [
     %{"type" => "temporal", "before" => "animation1", "after" => "animation2"}
@@ -236,8 +236,9 @@ The `create_forge_domain_spec()` provides these methods for goal decomposition:
 
 ### Object Creation
 - **`create_object`**: Create individual objects
-  - Supports `type: "cube"` or `type: "sphere"`
+  - Supports `type: "cube"` or `type: "sphere"` (tapered capsule)
   - Decomposes to `create_cube` or `create_sphere` commands
+  - Objects are created using bmesh primitives (vertices, edges, faces)
 
 ### Animation
 - **`stacking_animation`**: Create a stacking animation with multiple objects
@@ -276,11 +277,16 @@ The `create_forge_domain_spec()` provides these methods for goal decomposition:
 
 The `create_forge_domain_spec()` provides these primitive commands:
 
-- **`create_cube`**: Create a cube object
+- **`create_cube`**: Create a cube object using bmesh primitives
   - Args: `name`, `location`, `size`
+  - Constructs cube manually using vertices and faces (no high-level operators)
+  - Requires MCP Blender - fails if not available
   
-- **`create_sphere`**: Create a sphere object
+- **`create_sphere`**: Create a tapered capsule object using bmesh primitives
   - Args: `name`, `location`, `radius`
+  - Creates a tapered capsule (cylindrical middle with hemispherical caps) following glTF Physics specification
+  - Constructs geometry manually using vertices and faces (no high-level operators)
+  - Requires MCP Blender - fails if not available
   
 - **`set_material`**: Apply material to object
   - Args: `object_name`, `material_name`, `color`
@@ -300,6 +306,11 @@ The `create_forge_domain_spec()` provides these primitive commands:
   
 - **`render_image`**: Render scene to image file
   - Args: `filepath`, `resolution_x`, `resolution_y`
+  
+- **`export_usd`**: Export scene to USD (Universal Scene Description) format
+  - Args: `filepath`
+  - Exports with materials, textures, animation, UV maps, normals, and instancing
+  - Requires MCP Blender - fails if not available
   
 - **`introspect_blender`**: Introspect Blender API object
   - Args: `object_path`
@@ -492,11 +503,11 @@ plan_spec = %{
       "reset_first" => true,
       "objects" => [
         %{"type" => "cube", "name" => "MainCube", "location" => [0, 0, 0], "size" => 2.0},
-        %{"type" => "sphere", "name" => "MainSphere", "location" => [3, 0, 0], "radius" => 1.5}
+        %{"type" => "sphere", "name" => "MainTaperedCapsule", "location" => [3, 0, 0], "radius" => 1.5}
       ],
       "materials" => [
         %{"name" => "RedMaterial", "color" => [1.0, 0.0, 0.0, 1.0], "objects" => ["MainCube"]},
-        %{"name" => "BlueMaterial", "color" => [0.0, 0.0, 1.0, 1.0], "objects" => ["MainSphere"]}
+        %{"name" => "BlueMaterial", "color" => [0.0, 0.0, 1.0, 1.0], "objects" => ["MainTaperedCapsule"]}
       ]
     }}
   ],
@@ -582,9 +593,30 @@ plan_spec = %{
 {:ok, plan_json} = AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir)
 ```
 
+## Object Creation Details
+
+### BMesh Primitives
+
+All object creation functions (`create_cube`, `create_sphere`) use **bmesh primitives** (vertices, edges, faces) rather than high-level operators:
+
+- **Cubes**: Manually constructed with 8 vertices and 6 faces
+- **Tapered Capsules**: Manually constructed with:
+  - Bottom hemisphere (from pole to equator)
+  - Cylindrical middle section (tapering from bottom to top radius)
+  - Top hemisphere (from equator to pole)
+  - Follows glTF Physics `KHR_implicit_shapes` capsule specification
+
+### MCP Blender Requirement
+
+Object creation and export functions require **MCP Blender** to be available. They will fail (no mock mode) if:
+- MCP Blender is not connected
+- The `mcp_blender_execute_blender_code` tool is unavailable
+- Blender code execution fails
+
 ## Summary
 
 - **Required**: `aria_planner` must be installed and available
+- **Required**: MCP Blender must be available for object creation and export operations
 - **Primary Function**: Use `run_lazy_planning/2` for all planning scenarios
 - **Domain**: Use `create_forge_domain_spec()` for comprehensive workflows
 - **Error Handling**: Always handle `{:error, reason}` cases
@@ -592,5 +624,6 @@ plan_spec = %{
 - **Dependencies**: Handled automatically via method decomposition and backtracking
 - **Method Decomposition**: Methods decompose goals into ordered tasks, ensuring dependencies
 - **No Fallbacks**: Planning will fail if `aria_planner` is unavailable
+- **No Mock Mode**: Object creation and export functions fail if MCP Blender is unavailable
 
 For more details, see the source code in `lib/aria_forge/tools/planning.ex`.
