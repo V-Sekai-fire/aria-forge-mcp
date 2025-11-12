@@ -166,6 +166,32 @@ defmodule AriaForge.NativeService do
     })
   end
 
+  deftool "export_usd" do
+    meta do
+      name("Export USD")
+      description("Export the current scene to USD (Universal Scene Description) format")
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        filepath: %{
+          type: "string",
+          description: "File path where the USD file should be saved (e.g., '/path/to/scene.usd' or '/path/to/scene.usdc')"
+        },
+        context_token: %{
+          type: "string",
+          description: "Optional context token (macaroon) for scene context. If not provided, uses default context."
+        },
+        scene_id: %{
+          type: "string",
+          description: "Optional scene ID. If not provided, uses default scene."
+        }
+      },
+      required: ["filepath"]
+    })
+  end
+
   deftool "introspect_blender" do
     meta do
       name("Introspect 3D API")
@@ -797,6 +823,18 @@ defmodule AriaForge.NativeService do
 
     with {:ok, temp_dir, _context_pid} <- Context.get_or_create_context(args, state),
          {:ok, result} <- AriaForge.Mesh.import_bmesh_scene(gltf_data, temp_dir) do
+      {:ok, %{content: [Helpers.text_content("Result: #{result}")]}, state}
+    else
+      {:error, reason} -> {:error, reason, state}
+    end
+  end
+
+  @impl true
+  def handle_tool_call("export_usd", args, state) do
+    filepath = Map.get(args, "filepath")
+
+    with {:ok, temp_dir, _context_pid} <- Context.get_or_create_context(args, state),
+         {:ok, result} <- AriaForge.Tools.export_usd(filepath, temp_dir) do
       {:ok, %{content: [Helpers.text_content("Result: #{result}")]}, state}
     else
       {:error, reason} -> {:error, reason, state}

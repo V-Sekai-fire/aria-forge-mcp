@@ -60,6 +60,12 @@ defmodule AriaForge.Tools do
               ),
               to: Rendering
 
+  @doc """
+  Exports the current scene to USD (Universal Scene Description) format.
+  """
+  @spec export_usd(String.t(), String.t()) :: result()
+  defdelegate export_usd(filepath, temp_dir), to: Rendering
+
   # Scene management functions
   @doc """
   Resets the scene to a clean state by removing all objects.
