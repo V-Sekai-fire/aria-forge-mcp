@@ -286,6 +286,10 @@ defmodule AriaForge.Tools.Planning do
       "reset_scene" ->
         AriaForge.Tools.Scene.reset_scene(temp_dir)
 
+      "set_scene_fps" ->
+        fps = Map.get(args, "fps", 30)
+        AriaForge.Tools.Scene.set_scene_fps(fps, temp_dir)
+
       "get_scene_info" ->
         AriaForge.Tools.Scene.get_scene_info(temp_dir)
 
@@ -510,6 +514,28 @@ defmodule AriaForge.Tools.Planning do
           # Method alias for reset_and_prepare_scene
           reset_fn = Map.get(create_forge_domain_spec().methods, "reset_and_prepare_scene")
           reset_fn.(_state, goal)
+        end,
+        "prepare_scene" => fn _state, goal ->
+          # Method to prepare scene: reset starter objects and set FPS
+          # This records the workflow: remove starter objects, then set FPS to 30
+          tasks = [{"reset_scene", %{}}]
+          
+          # Set FPS if specified (default 30)
+          fps = Map.get(goal, "fps", 30)
+          tasks = tasks ++ [{"set_scene_fps", %{"fps" => fps}}]
+          
+          # If goal specifies objects or materials, add those after reset
+          objects = Map.get(goal, "objects", [])
+          if length(objects) > 0 do
+            tasks = tasks ++ Enum.map(objects, fn obj -> {"create_object", obj} end)
+          end
+          
+          materials = Map.get(goal, "materials", [])
+          if length(materials) > 0 do
+            tasks = tasks ++ [{"apply_materials", %{"materials" => materials}}]
+          end
+          
+          tasks
         end
       },
       commands: %{
@@ -530,6 +556,11 @@ defmodule AriaForge.Tools.Planning do
         end,
         "reset_scene" => fn state, _args ->
           # Command: reset scene to clean state
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
+        end,
+        "set_scene_fps" => fn state, _args ->
+          # Command: set scene frame rate (FPS)
           # Duration will be recorded during actual execution
           {:ok, state, "PT1S"}
         end,
@@ -778,6 +809,24 @@ defmodule AriaForge.Tools.Planning do
                       },
                       dependencies: [],
                       description: "Create sphere '#{Map.get(args, "name", "Sphere")}'"
+                    }
+
+                  ["set_scene_fps", args] when is_map(args) ->
+                    %{
+                      tool: "set_scene_fps",
+                      args: %{
+                        "fps" => Map.get(args, "fps", 30)
+                      },
+                      dependencies: [],
+                      description: "Set scene FPS to #{Map.get(args, "fps", 30)}"
+                    }
+
+                  ["reset_scene", args] when is_map(args) ->
+                    %{
+                      tool: "reset_scene",
+                      args: %{},
+                      dependencies: [],
+                      description: "Reset scene - remove all starter objects"
                     }
 
                   _ ->

@@ -82,6 +82,10 @@ defmodule AriaForge.Tools.Planning.Execution do
       "reset_scene" ->
         Scene.reset_scene(temp_dir)
 
+      "set_scene_fps" ->
+        fps = Map.get(args, "fps", 30)
+        Scene.set_scene_fps(fps, temp_dir)
+
       "get_scene_info" ->
         Scene.get_scene_info(temp_dir)
 

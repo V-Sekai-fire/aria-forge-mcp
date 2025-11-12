@@ -44,9 +44,23 @@ defmodule AriaForge.Tools.Scene do
      }}
   end
 
+  @doc """
+  Sets the scene frame rate (FPS).
+  """
+  @spec set_scene_fps(integer(), String.t()) :: result()
+  def set_scene_fps(fps \\ 30, temp_dir) do
+    mock_set_scene_fps(fps)
+  end
+
+  defp mock_set_scene_fps(fps) do
+    {:ok, "Set scene FPS to #{fps}"}
+  end
+
   # Test helper functions
   @doc false
   def test_mock_get_scene_info(), do: mock_get_scene_info()
   @doc false
   def test_mock_reset_scene(), do: mock_reset_scene()
+  @doc false
+  def test_mock_set_scene_fps(fps), do: mock_set_scene_fps(fps)
 end

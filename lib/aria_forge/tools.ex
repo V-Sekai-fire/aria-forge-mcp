@@ -73,6 +73,12 @@ defmodule AriaForge.Tools do
   @spec get_scene_info(String.t()) :: result()
   defdelegate get_scene_info(temp_dir), to: Scene
 
+  @doc """
+  Sets the scene frame rate (FPS).
+  """
+  @spec set_scene_fps(integer(), String.t()) :: result()
+  defdelegate set_scene_fps(fps \\ 30, temp_dir), to: Scene
+
   # Introspection functions
   @doc """
   Introspects bpy/bmesh structure for debugging and understanding API.
@@ -133,4 +139,7 @@ defmodule AriaForge.Tools do
 
   @doc false
   def test_mock_reset_scene(), do: Scene.test_mock_reset_scene()
+
+  @doc false
+  def test_mock_set_scene_fps(fps), do: Scene.test_mock_set_scene_fps(fps)
 end
