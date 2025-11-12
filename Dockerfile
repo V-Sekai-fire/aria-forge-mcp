@@ -18,16 +18,33 @@ RUN dnf update -y && dnf install -y --allowerasing \
     curl \
     which \
     ca-certificates \
-    ncurses-devel
+    ncurses-devel \
+    autoconf \
+    automake \
+    libtool \
+    flex \
+    m4
 
-# Install Erlang/OTP 26 from EPEL (available in AlmaLinux 9)
-RUN dnf install -y epel-release && \
-    dnf install -y erlang erlang-erl_interface && \
-    erl -version
-
-# Install Elixir 1.17 from precompiled binaries (compatible with OTP 26)
+# Install Erlang/OTP 28 from source (required for :zstd support)
+# OTP 28+ includes the built-in :zstd module
 RUN cd /tmp && \
-    curl -Lf https://github.com/elixir-lang/elixir/releases/download/v1.17.3/elixir-otp-26.zip -o elixir.zip && \
+    curl -Lf https://github.com/erlang/otp/releases/download/OTP-28.0/otp_src_28.0.tar.gz -o otp.tar.gz && \
+    tar -xzf otp.tar.gz && \
+    cd otp_src_28.0 && \
+    ./otp_build autoconf && \
+    ./configure --prefix=/usr/local/erlang --without-javac && \
+    make -j$(nproc) && \
+    make install && \
+    cd / && \
+    rm -rf /tmp/otp* && \
+    /usr/local/erlang/bin/erl -version && \
+    /usr/local/erlang/bin/erl -eval 'io:format("OTP Release: ~s~n", [erlang:system_info(otp_release)]), halt().' -noshell
+
+ENV PATH="/usr/local/erlang/bin:${PATH}"
+
+# Install Elixir 1.19 from precompiled binaries (compatible with OTP 28)
+RUN cd /tmp && \
+    curl -Lf https://github.com/elixir-lang/elixir/releases/download/v1.19.2/elixir-otp-28.zip -o elixir.zip && \
     unzip -q elixir.zip && \
     mkdir -p /opt/elixir && \
     mv bin lib man /opt/elixir/ && \
@@ -69,24 +86,24 @@ WORKDIR /app
 # Note: Mix releases include ERTS, but we install Erlang from repos for compatibility
 # Note: pythonx manages its own Python environment, so we don't need to install
 #       Python packages here - they're bundled with the release
-# Install Erlang/OTP 26 from EPEL (same as builder)
+# Install Erlang/OTP 28 runtime libraries (same as builder, required for :zstd)
+# Note: Mix releases include ERTS, so we only need runtime libraries for compatibility
 RUN dnf update -y && \
-    dnf install -y epel-release && \
     dnf install -y \
     openssl \
     ncurses-libs \
     libstdc++ \
-    erlang \
     wget \
     ca-certificates \
     glibc-langpack-en && \
     localedef -c -i en_US -f UTF-8 en_US.UTF-8 || true && \
     dnf clean all
 
-# Copy Elixir installation from builder
+# Copy Erlang and Elixir installations from builder
+COPY --from=builder /usr/local/erlang /usr/local/erlang
 COPY --from=builder /opt/elixir /opt/elixir
 
-ENV PATH="/opt/elixir/bin:${PATH}"
+ENV PATH="/opt/elixir/bin:/usr/local/erlang/bin:${PATH}"
 
 # Note: Blender and Python dependencies are installed by pythonx during compilation
 # No need to install them here as pythonx manages its own Python environment
