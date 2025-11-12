@@ -15,7 +15,7 @@ defmodule AriaForge.Tools do
   - `AriaForge.Tools.Utils` - Shared utilities
   """
 
-  alias AriaForge.Tools.{Objects, Materials, Rendering, Scene, Introspection, Planning}
+  alias AriaForge.Tools.{Objects, Materials, Rendering, Scene, Introspection, Planning, Animation}
 
   @type result :: {:ok, term()} | {:error, String.t()}
 

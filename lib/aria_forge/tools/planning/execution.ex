@@ -6,7 +6,7 @@ defmodule AriaForge.Tools.Planning.Execution do
   Plan execution functionality.
   """
 
-  alias AriaForge.Tools.{Objects, Materials, Scene, Introspection}
+  alias AriaForge.Tools.{Objects, Materials, Scene, Introspection, Animation}
   alias AriaForge.Tools.Planning.Utils
 
   @doc """
@@ -88,6 +88,13 @@ defmodule AriaForge.Tools.Planning.Execution do
 
       "get_scene_info" ->
         Scene.get_scene_info(temp_dir)
+
+      "set_keyframe" ->
+        object_name = Map.get(args, "object")
+        property = Map.get(args, "property", "location")
+        value = Map.get(args, "value")
+        frame = Map.get(args, "frame", 1)
+        Animation.set_keyframe(object_name, property, value, frame, temp_dir)
 
       _ ->
         {:error, "Unknown tool: #{tool}"}

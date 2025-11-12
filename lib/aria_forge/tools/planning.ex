@@ -46,7 +46,7 @@ defmodule AriaForge.Tools.Planning do
               if custom_domain != nil do
                 convert_domain_spec_from_json(custom_domain)
               else
-                create_scene_domain_spec()
+                create_forge_domain_spec()
               end
 
             # Convert initial_state to planning format, including constraints
@@ -293,6 +293,13 @@ defmodule AriaForge.Tools.Planning do
       "get_scene_info" ->
         AriaForge.Tools.Scene.get_scene_info(temp_dir)
 
+      "set_keyframe" ->
+        object_name = Map.get(args, "object")
+        property = Map.get(args, "property", "location")
+        value = Map.get(args, "value")
+        frame = Map.get(args, "frame", 1)
+        AriaForge.Tools.Animation.set_keyframe(object_name, property, value, frame, temp_dir)
+
       _ ->
         {:error, "Unknown tool: #{tool}"}
     end
@@ -515,14 +522,149 @@ defmodule AriaForge.Tools.Planning do
           reset_fn = Map.get(create_forge_domain_spec().methods, "reset_and_prepare_scene")
           reset_fn.(_state, goal)
         end,
+        "stacking_animation" => fn _state, goal ->
+          # Method to create a stacking animation
+          # Decomposes into animate_object tasks for each object
+          # animate_object method handles ensuring object exists before keyframes
+          
+          count = Map.get(goal, "count", 3)
+          base_location = Map.get(goal, "base_location", [0, 0, 0])
+          spacing = Map.get(goal, "spacing", 2.0)
+          start_frame = Map.get(goal, "start_frame", 1)
+          frames_per_object = Map.get(goal, "frames_per_object", 30)
+          use_materials = Map.get(goal, "use_materials", true)
+          
+          # Color palette for distinguishing cubes
+          colors = [
+            [1.0, 0.0, 0.0, 1.0],  # Red
+            [0.0, 1.0, 0.0, 1.0],  # Green
+            [0.0, 0.0, 1.0, 1.0],  # Blue
+            [1.0, 1.0, 0.0, 1.0],  # Yellow
+            [1.0, 0.0, 1.0, 1.0],  # Magenta
+            [0.0, 1.0, 1.0, 1.0]   # Cyan
+          ]
+          
+          # Decompose into animate_object tasks - method handles dependencies
+          Enum.flat_map(0..(count - 1), fn i ->
+            obj_name = "StackCube#{i + 1}"
+            x = Enum.at(base_location, 0) || 0
+            y = Enum.at(base_location, 1) || 0
+            z = Enum.at(base_location, 2) || 0
+            
+            # Start position (below final position)
+            start_z = z - (i * spacing) - spacing
+            start_location = [x, y, start_z]
+            
+            # Final position (stacked)
+            final_z = z + (i * spacing)
+            final_location = [x, y, final_z]
+            
+            # Start and end frames for this object
+            frame_start = start_frame + (i * frames_per_object)
+            frame_end = frame_start + frames_per_object
+            
+            # Get color for this cube
+            color = Enum.at(colors, rem(i, length(colors)))
+            color_name = case i do
+              0 -> "Red"
+              1 -> "Green"
+              2 -> "Blue"
+              _ -> "Color#{i + 1}"
+            end
+            
+            tasks = [
+              # Use animate_object method - it handles ensuring object exists
+              {"animate_object", %{
+                "object_name" => obj_name,
+                "object_type" => "cube",
+                "start_location" => start_location,
+                "keyframes" => [
+                  %{"frame" => frame_start, "property" => "location", "value" => final_location},
+                  %{"frame" => frame_end, "property" => "location", "value" => final_location}
+                ]
+              }}
+            ]
+            
+            # Add material application if enabled
+            if use_materials do
+              tasks ++ [{"set_material", %{
+                "object_name" => obj_name,
+                "material_name" => "#{color_name}Material",
+                "color" => color
+              }}]
+            else
+              tasks
+            end
+          end)
+        end,
+        "animate_object" => fn _state, goal ->
+          # Method to animate an object with keyframes
+          # Handles dependency: ensures object exists before setting keyframes
+          # Decomposes to create_object (if needed) then set_keyframe tasks
+          
+          object_name = Map.get(goal, "object_name")
+          object_type = Map.get(goal, "object_type", "cube")
+          start_location = Map.get(goal, "start_location", [0, 0, 0])
+          keyframes = Map.get(goal, "keyframes", [])
+          
+          tasks = []
+          
+          # First, ensure object exists (method handles this dependency)
+          case object_type do
+            "cube" ->
+              tasks = [{"create_cube", %{
+                "name" => object_name,
+                "location" => start_location,
+                "size" => 1.5
+              }}]
+            "sphere" ->
+              tasks = [{"create_sphere", %{
+                "name" => object_name,
+                "location" => start_location,
+                "radius" => 1.0
+              }}]
+            _ ->
+              tasks = [{"create_cube", %{
+                "name" => object_name,
+                "location" => start_location,
+                "size" => 1.5
+              }}]
+          end
+          
+          # Then set keyframes (object is guaranteed to exist by method decomposition)
+          keyframe_tasks = Enum.map(keyframes, fn kf ->
+            {"set_keyframe", %{
+              "object" => object_name,
+              "property" => Map.get(kf, "property", "location"),
+              "value" => Map.get(kf, "value"),
+              "frame" => Map.get(kf, "frame", 1)
+            }}
+          end)
+          
+          # Method decomposition ensures create_object comes before set_keyframe
+          tasks ++ keyframe_tasks
+        end,
         "prepare_scene" => fn _state, goal ->
           # Method to prepare scene: reset starter objects and set FPS
           # This records the workflow: remove starter objects, then set FPS to 30
-          tasks = [{"reset_scene", %{}}]
+          tasks = []
+          
+          # Optionally introspect scene before reset
+          if Map.get(goal, "introspect_before", false) do
+            tasks = [{"introspect_scene", %{}}]
+          end
+          
+          # Reset scene
+          tasks = tasks ++ [{"reset_scene", %{}}]
           
           # Set FPS if specified (default 30)
           fps = Map.get(goal, "fps", 30)
           tasks = tasks ++ [{"set_scene_fps", %{"fps" => fps}}]
+          
+          # Optionally introspect scene after preparation
+          if Map.get(goal, "introspect_after", false) do
+            tasks = tasks ++ [{"introspect_scene", %{}}]
+          end
           
           # If goal specifies objects or materials, add those after reset
           objects = Map.get(goal, "objects", [])
@@ -541,11 +683,13 @@ defmodule AriaForge.Tools.Planning do
       commands: %{
         "create_cube" => fn state, _args ->
           # Command: create cube
+          # Pure state transformer - methods handle decomposition and dependencies
           # Duration will be recorded during actual execution
           {:ok, state, "PT1S"}
         end,
         "create_sphere" => fn state, _args ->
           # Command: create sphere
+          # Pure state transformer - methods handle decomposition and dependencies
           # Duration will be recorded during actual execution
           {:ok, state, "PT1S"}
         end,
@@ -582,6 +726,12 @@ defmodule AriaForge.Tools.Planning do
         "introspect_python" => fn state, _args ->
           # Command: introspect Python object/API structure
           # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
+        end,
+        "set_keyframe" => fn state, _args ->
+          # Command: set keyframe for animation
+          # Pure state transformer - just updates state to record keyframe was set
+          # Methods handle ensuring object exists before calling this
           {:ok, state, "PT1S"}
         end
       },
