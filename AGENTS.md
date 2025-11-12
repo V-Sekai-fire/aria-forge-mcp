@@ -26,7 +26,7 @@ Domain specifications define:
 - **Initial Tasks**: Tasks that should be included at the start of planning
 
 Two domain specifications are available:
-- **`create_forge_domain_spec()`** - Comprehensive domain for all forge operations
+- **`create_forge_domain_spec()`** - Comprehensive domain for all forge operations (default)
 - **`create_scene_domain_spec()`** - Focused domain for scene construction
 
 ## Requirements
@@ -73,7 +73,7 @@ The `plan_spec` map should contain:
   - Temporal: `%{"type" => "temporal", "total_frames" => 250}`
   
 - **`domain`** (map, optional): Custom domain specification
-  - If `nil`, uses default `create_scene_domain_spec()`
+  - If `nil`, uses default `create_forge_domain_spec()`
   - Can provide custom methods and commands
   
 - **`opts`** (map, optional): Planning options
@@ -228,11 +228,29 @@ The `create_forge_domain_spec()` provides these methods for goal decomposition:
   - Resets scene, then creates objects and applies materials
   
 - **`prepare_clean_scene`**: Alias for `reset_and_prepare_scene`
+  
+- **`prepare_scene`**: Prepare scene with reset and FPS setting
+  - Parameters: `fps` (default: 30), `introspect_before`, `introspect_after`, `objects`, `materials`
+  - Decomposes to `reset_scene` and `set_scene_fps`
+  - Optionally includes introspection and object/material creation
 
 ### Object Creation
 - **`create_object`**: Create individual objects
   - Supports `type: "cube"` or `type: "sphere"`
   - Decomposes to `create_cube` or `create_sphere` commands
+
+### Animation
+- **`stacking_animation`**: Create a stacking animation with multiple objects
+  - Parameters: `count`, `base_location`, `spacing`, `start_frame`, `frames_per_object`, `use_materials`
+  - Decomposes to `animate_object` tasks for each object
+  - Automatically assigns distinct colors to objects (Red, Green, Blue, etc.)
+  - Example: `{"stacking_animation", %{"count" => 3, "base_location" => [0, 0, 0], "spacing" => 2.0}}`
+  
+- **`animate_object`**: Animate an object with keyframes
+  - Handles dependency: ensures object exists before setting keyframes
+  - Parameters: `object_name`, `object_type`, `start_location`, `keyframes`
+  - Decomposes to `create_cube`/`create_sphere` then `set_keyframe` tasks
+  - Method decomposition ensures object creation happens before keyframes
 
 ### Material Management
 - **`apply_materials`**: Apply materials to objects
@@ -270,8 +288,15 @@ The `create_forge_domain_spec()` provides these primitive commands:
 - **`reset_scene`**: Reset scene to clean state
   - Args: none
   
+- **`set_scene_fps`**: Set scene frame rate (FPS)
+  - Args: `fps` (integer)
+  
 - **`get_scene_info`**: Get current scene information
   - Args: none
+  
+- **`set_keyframe`**: Set keyframe for animation
+  - Args: `object`, `property`, `value`, `frame`
+  - Pure state transformer - methods handle ensuring object exists first
   
 - **`render_image`**: Render scene to image file
   - Args: `filepath`, `resolution_x`, `resolution_y`
@@ -368,6 +393,32 @@ If plan execution fails (e.g., invalid tool, missing arguments), `execute_plan/2
 
 **Action**: Review the plan steps, verify tool names and arguments are correct.
 
+## Method Decomposition and Dependencies
+
+**Key Principle**: Dependencies are handled via method decomposition, not explicit constraints.
+
+- **Commands** are pure state transformers (no preconditions)
+- **Methods** handle dependencies by decomposing into ordered tasks
+- The planner uses backtracking to ensure correct ordering
+- No explicit dependency constraints needed in most cases
+
+### Example: Animation Dependencies
+
+```elixir
+# stacking_animation decomposes to:
+#   - animate_object('StackCube1', ...)
+#   - animate_object('StackCube2', ...)
+#   - animate_object('StackCube3', ...)
+
+# Each animate_object decomposes to:
+#   - create_cube('StackCube1', ...)  # Object must exist first
+#   - set_keyframe('StackCube1', ...) # Then set keyframes
+#   - set_keyframe('StackCube1', ...)
+
+# The planner automatically ensures create_cube happens before set_keyframe
+# through method decomposition and backtracking
+```
+
 ## Best Practices
 
 ### 1. Always Check for aria_planner
@@ -400,13 +451,18 @@ Use high-level methods when possible:
 {"create_cube", %{"name" => "Cube1"}}
 ```
 
-### 4. Include Constraints
+### 4. Use Method Decomposition for Dependencies
 
-Specify dependencies and temporal constraints when needed:
+Dependencies are handled automatically via method decomposition. Only use explicit constraints for:
+- Temporal constraints (frame timing)
+- Cross-method dependencies (rare)
 
 ```elixir
+# Good: Let method decomposition handle dependencies
+{"stacking_animation", %{"count" => 3}}  # Dependencies handled automatically
+
+# Only use explicit constraints for temporal or cross-method cases
 "constraints" => [
-  %{"type" => "dependency", "from" => "task1", "to" => "task2"},
   %{"type" => "temporal", "total_frames" => 250}
 ]
 ```
@@ -476,7 +532,32 @@ plan_spec = %{
 {:ok, plan_json} = AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir)
 ```
 
-### Workflow 3: Render Scene
+### Workflow 3: Stacking Animation with Materials
+
+```elixir
+plan_spec = %{
+  "initial_state" => %{"objects" => []},
+  "tasks" => [
+    {"prepare_scene", %{"fps" => 30}},
+    {"stacking_animation", %{
+      "count" => 3,
+      "base_location" => [0, 0, 0],
+      "spacing" => 2.0,
+      "start_frame" => 1,
+      "frames_per_object" => 30,
+      "use_materials" => true
+    }}
+  ],
+  "constraints" => [],
+  "domain" => nil,
+  "opts" => %{}
+}
+
+{:ok, plan_json} = AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir)
+{:ok, result} = AriaForge.Tools.Planning.execute_plan(plan_json, temp_dir)
+```
+
+### Workflow 4: Render Scene
 
 ```elixir
 plan_spec = %{
@@ -508,7 +589,8 @@ plan_spec = %{
 - **Domain**: Use `create_forge_domain_spec()` for comprehensive workflows
 - **Error Handling**: Always handle `{:error, reason}` cases
 - **Execution**: Use `execute_plan/2` to execute generated plans
-- **Dependencies**: Handled automatically by `aria_planner` via backtracking
+- **Dependencies**: Handled automatically via method decomposition and backtracking
+- **Method Decomposition**: Methods decompose goals into ordered tasks, ensuring dependencies
 - **No Fallbacks**: Planning will fail if `aria_planner` is unavailable
 
 For more details, see the source code in `lib/aria_forge/tools/planning.ex`.
