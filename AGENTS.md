@@ -1,352 +1,515 @@
-# Setting up bpy-mcp with AI Agents (VS Code & Cursor)
+# AI Agent Guide: Using AriaForge Planning System
 
-This guide shows you how to configure AI agents in VS Code and Cursor to use the bpy-mcp server for Blender 3D modeling operations.
+This guide explains how AI agents should interact with the AriaForge planning system to generate and execute complex 3D scene construction workflows.
 
-## Prerequisites
+## Overview
 
-1. **VS Code** or **Cursor IDE** installed and running
-2. **Elixir and Mix** installed on your system
-3. **bpy-mcp** project dependencies installed (`mix deps.get`)
-4. MCP extension/feature enabled in your editor
+The AriaForge planning system uses the `aria_planner` library to generate ordered sequences of commands that respect dependencies, temporal constraints, and goal hierarchies. **Planning requires `aria_planner` to be installed and available** - there are no fallback planning mechanisms.
 
-## Configuration Methods
+## Key Concepts
 
-Both VS Code and Cursor support MCP servers through configuration files. The recommended method is stdio transport.
+### Planning Functions
 
-### Method 1: Stdio Transport (Recommended)
+The planning system provides several functions for different planning scenarios:
 
-This is the standard MCP transport method that works with most MCP clients.
+1. **`run_lazy_planning/2`** - Generic planning function for any scenario
+2. **`plan_scene_construction/2`** - Plans scene construction workflows
+3. **`plan_material_application/2`** - Plans material application sequences
+4. **`plan_animation/2`** - Plans animation sequences with temporal constraints
+5. **`execute_plan/2`** - Executes a generated plan
 
-#### Step 1: Open MCP Settings
+### Domain Specifications
 
-**For Cursor:**
-1. Open Cursor IDE
-2. Press `Shift + Command + P` (macOS) or `Shift + Ctrl + P` (Windows/Linux)
-3. Type "Open MCP Settings" and select it
-4. This opens the `mcp.json` configuration file
+Domain specifications define:
+- **Methods**: Goal decomposition functions that break high-level goals into subgoals
+- **Commands**: Primitive operations that can be executed directly
+- **Initial Tasks**: Tasks that should be included at the start of planning
 
-**For VS Code:**
-1. Open VS Code
-2. Install the MCP extension (if available) or use the built-in MCP support
-3. Open Command Palette: `Shift + Command + P` (macOS) or `Shift + Ctrl + P` (Windows/Linux)
-4. Type "Open MCP Settings" or navigate to MCP configuration
-5. Edit the `mcp.json` configuration file
+Two domain specifications are available:
+- **`create_forge_domain_spec()`** - Comprehensive domain for all forge operations
+- **`create_scene_domain_spec()`** - Focused domain for scene construction
 
-The configuration file is typically located at:
-- **macOS/Linux**: `~/.config/mcp.json` or `~/.config/Code/User/mcp.json`
-- **Windows**: `%APPDATA%\Code\User\mcp.json` or `%APPDATA%\mcp.json`
+## Requirements
 
-#### Step 2: Configure the Server
+### Required: aria_planner
 
-Add the following configuration to your `mcp.json` file:
+**All planning functions require `aria_planner` to be available.** If `aria_planner` is not installed or cannot be loaded, planning functions will return an error:
 
-```json
-{
-  "mcpServers": {
-    "bpy-mcp": {
-      "command": "mix",
-      "args": ["mcp.stdio"],
-      "cwd": "/path/to/bpy-mcp",
-      "env": {
-        "MIX_ENV": "dev"
-      }
-    }
-  }
+```elixir
+{:error, "AriaPlanner not available. Planning requires aria_planner to be installed and available."}
+```
+
+**Important**: There are no fallback planning mechanisms. If `aria_planner` is unavailable, planning will fail.
+
+## Using run_lazy_planning
+
+The `run_lazy_planning/2` function is the primary interface for all planning scenarios. It handles:
+- Goal decomposition (hierarchical planning)
+- Dependency resolution (via backtracking in aria_planner)
+- Temporal scheduling (via aria_planner's temporal STN)
+- Optimal ordering (via lazy refinement)
+
+### Function Signature
+
+```elixir
+@spec run_lazy_planning(map(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
+```
+
+### Parameters
+
+The `plan_spec` map should contain:
+
+- **`initial_state`** (map, required): Initial state of the scene/planning problem
+  - Example: `%{"objects" => [], "facts" => []}`
+  
+- **`tasks`** (list, required): List of tasks to accomplish
+  - Tasks can be:
+    - Tuples: `{"task_name", %{"arg" => "value"}}`
+    - Strings: `"task_name"` (no arguments)
+    - Maps: `%{"task" => "task_name", "args" => %{}}`
+  
+- **`constraints`** (list, optional): Constraints on the plan
+  - Dependencies: `%{"type" => "dependency", "from" => "task1", "to" => "task2"}`
+  - Temporal: `%{"type" => "temporal", "total_frames" => 250}`
+  
+- **`domain`** (map, optional): Custom domain specification
+  - If `nil`, uses default `create_scene_domain_spec()`
+  - Can provide custom methods and commands
+  
+- **`opts`** (map, optional): Planning options
+  - `"execution"` (boolean): Whether to execute the plan immediately (default: `false`)
+
+### Example: Basic Scene Construction
+
+```elixir
+plan_spec = %{
+  "initial_state" => %{"objects" => []},
+  "tasks" => [
+    {"create_forge_scene", %{
+      "objects" => [
+        %{"type" => "cube", "name" => "Cube1", "location" => [0, 0, 0]},
+        %{"type" => "sphere", "name" => "Sphere1", "location" => [2, 0, 0]}
+      ]
+    }}
+  ],
+  "constraints" => [],
+  "domain" => nil,
+  "opts" => %{}
 }
+
+result = AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir)
 ```
 
-**Important:** 
-- Update the `cwd` path to match your actual project directory path
-- Use absolute paths (e.g., `/Users/username/Developer/bpy-mcp` on macOS/Linux or `C:\Users\username\Developer\bpy-mcp` on Windows)
+### Example: With Scene Reset and Introspection
 
-#### Step 3: Save and Restart
-
-1. Save the `mcp.json` file
-2. Restart your editor (or reload the window)
-3. The server should appear in the MCP settings and show as "Connected" or "Available"
-
-### Method 2: HTTP Transport (Alternative)
-
-If your editor supports HTTP-based MCP servers, you can use this configuration:
-
-#### Step 1: Start the HTTP Server
-
-First, start the MCP server in a terminal:
-
-```bash
-cd /path/to/bpy-mcp
-mix mcp.server --port 4000
-```
-
-Keep this terminal running.
-
-#### Step 2: Configure Your Editor
-
-In your editor's `mcp.json`, add:
-
-```json
-{
-  "mcpServers": {
-    "bpy-mcp": {
-      "url": "http://localhost:4000"
-    }
-  }
+```elixir
+plan_spec = %{
+  "initial_state" => %{"objects" => []},
+  "tasks" => [
+    {"create_forge_scene", %{
+      "reset_first" => true,
+      "introspect_first" => true,
+      "objects" => [
+        %{"type" => "cube", "name" => "NewCube", "location" => [0, 0, 0]}
+      ],
+      "materials" => [
+        %{"name" => "RedMaterial", "color" => [1.0, 0.0, 0.0, 1.0]}
+      ]
+    }}
+  ],
+  "constraints" => [],
+  "domain" => nil,
+  "opts" => %{}
 }
+
+result = AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir)
 ```
 
-## Verifying the Connection
+### Example: Custom Domain
 
-1. Open your editor's MCP settings
-2. Check that "bpy-mcp" appears in the list of configured servers
-3. The server should show as "Connected" or "Available"
-4. You should see the tools listed:
-   - `bpy_list_commands` - List available Blender commands
-   - `bpy_execute_command` - Execute Blender commands
+```elixir
+custom_domain = %{
+  methods: %{
+    "my_custom_method" => fn _state, goal ->
+      [{"create_cube", goal}]
+    end
+  },
+  commands: %{
+    "create_cube" => fn state, args -> {:ok, state, "PT1S"} end
+  },
+  initial_tasks: []
+}
 
-## Using the MCP Tools in Your Editor
+plan_spec = %{
+  "initial_state" => %{},
+  "tasks" => [{"my_custom_method", %{"name" => "TestCube"}}],
+  "constraints" => [],
+  "domain" => custom_domain,
+  "opts" => %{}
+}
 
-Once configured, the MCP tools become available to AI agents in your editor.
+result = AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir)
+```
 
-### VS Code Usage
+## Using Specialized Planning Functions
 
-1. **Open the AI Chat Panel** (GitHub Copilot Chat, Cursor-like features, or MCP-enabled extensions)
-2. **Start a conversation** with the AI agent
-3. The MCP tools should be automatically available for the AI to use
+### plan_scene_construction/2
 
-### Cursor Usage
+Plans scene construction workflows. Converts goal states into tasks and uses `run_lazy_planning`.
 
-1. **Open the Chat/Agent Panel** in Cursor
-2. **Ensure you're in Agent mode** (if applicable)
-3. The MCP tools should be available for the AI to use
-
-### Example Usage
-
-You can now ask your AI agent to:
-
-- **"Create a cube in Blender"**
-- **"List all available Blender commands"**
-- **"Create a sphere at position [2, 0, 0] with radius 1.5"**
-- **"Get information about the current scene"**
-- **"Create a cube named 'MyCube' at [1, 2, 3] with size 3.0"**
-- **"Reset the Blender scene"**
-
-The AI will automatically use the `bpy_execute_command` tool to execute these operations.
-
-### Example Tool Execution
-
-When you ask for something like "create a cube", the AI agent will use:
-
-```json
-{
-  "name": "bpy_execute_command",
-  "arguments": {
-    "commands": [
-      {
-        "command": "create_cube",
-        "args": {
-          "name": "Cube",
-          "location": [0, 0, 0],
-          "size": 2.0
-        }
-      }
+```elixir
+plan_spec = %{
+  "initial_state" => %{"objects" => []},
+  "goal_state" => %{
+    "objects" => [
+      %{"type" => "cube", "name" => "Cube1", "location" => [0, 0, 0]}
     ]
-  }
+  },
+  "constraints" => []
 }
+
+result = AriaForge.Tools.Planning.plan_scene_construction(plan_spec, temp_dir)
 ```
 
-## Troubleshooting
+### plan_material_application/2
 
-### Server Not Starting
+Plans material application sequences with dependency handling.
 
-If the stdio server doesn't start:
+```elixir
+plan_spec = %{
+  "objects" => ["Cube1", "Sphere1"],
+  "materials" => [
+    %{"name" => "RedMaterial", "color" => [1.0, 0.0, 0.0, 1.0]},
+    %{"name" => "BlueMaterial", "color" => [0.0, 0.0, 1.0, 1.0]}
+  ],
+  "dependencies" => [
+    %{"type" => "dependency", "from" => "RedMaterial", "to" => "BlueMaterial"}
+  ]
+}
 
-1. **Verify Elixir is installed**: `elixir --version`
-2. **Verify Mix is available**: `mix --version`
-3. **Check dependencies are installed**: 
-   ```bash
-   cd /path/to/bpy-mcp
-   mix deps.get
-   ```
-4. **Try running manually**:
-   ```bash
-   cd /path/to/bpy-mcp
-   mix mcp.stdio
-   ```
-   You should see server startup messages (or silence, which is normal for stdio mode)
+result = AriaForge.Tools.Planning.plan_material_application(plan_spec, temp_dir)
+```
 
-### Server Not Appearing in Editor
+### plan_animation/2
 
-1. **Check the `cwd` path** is correct in `mcp.json` (use absolute path)
-2. **Verify the server starts** without errors when run manually
-3. **Check editor's developer console** for errors:
-   - VS Code: Help → Toggle Developer Tools
-   - Cursor: Help → Toggle Developer Tools
-4. **Ensure the project has been compiled**: `mix compile`
-5. **Check file permissions** - ensure the editor can execute `mix`
+Plans animation sequences with temporal constraints.
 
-### Tools Not Working
+```elixir
+plan_spec = %{
+  "animations" => [
+    %{"object" => "Cube1", "property" => "location", "value" => [1, 0, 0], "frame" => 10},
+    %{"object" => "Sphere1", "property" => "location", "value" => [2, 0, 0], "frame" => 20}
+  ],
+  "constraints" => [
+    %{"type" => "temporal", "before" => "animation1", "after" => "animation2"}
+  ],
+  "total_frames" => 250
+}
 
-1. **Verify Blender is installed** (if using real Blender, not mock mode)
-2. **Check Python and Pythonx are properly configured**
-3. **Test the server manually** with curl:
-   ```bash
-   curl -X POST http://localhost:4000 \
-     -H "Content-Type: application/json" \
-     -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
-   ```
-4. **Check for errors** in the server output when running manually
-5. **Verify environment variables** are set correctly (see Advanced Configuration)
+result = AriaForge.Tools.Planning.plan_animation(plan_spec, temp_dir)
+```
 
-### Editor-Specific Issues
+## Available Domain Methods
 
-**VS Code:**
-- Ensure you have the MCP extension installed and enabled
-- Check VS Code's output panel for MCP-related messages
-- Try reloading the window after configuration changes
+The `create_forge_domain_spec()` provides these methods for goal decomposition:
 
-**Cursor:**
-- Cursor has built-in MCP support, but ensure you're using a compatible version
-- Check Cursor's settings for MCP-related options
-- Verify the MCP server shows as "active" in Cursor's MCP panel
+### Scene Management
+- **`create_forge_scene`**: Complete scene creation workflow
+  - Supports `reset_first` and `introspect_first` options
+  - Handles objects, materials, and rendering
+  
+- **`create_scene`**: Basic scene creation
+  - Decomposes into object creation tasks
+  
+- **`introspect_scene`**: Get current scene information
+  - Decomposes to `get_scene_info` command
+  
+- **`reset_and_prepare_scene`**: Reset scene and prepare for new work
+  - Resets scene, then creates objects and applies materials
+  
+- **`prepare_clean_scene`**: Alias for `reset_and_prepare_scene`
 
-## Advanced Configuration
+### Object Creation
+- **`create_object`**: Create individual objects
+  - Supports `type: "cube"` or `type: "sphere"`
+  - Decomposes to `create_cube` or `create_sphere` commands
 
-### Custom Port
+### Material Management
+- **`apply_materials`**: Apply materials to objects
+  - Decomposes to `set_material` commands
+  
+- **`setup_materials`**: Alias for `apply_materials`
 
-For HTTP transport, you can specify a custom port:
+### Rendering
+- **`prepare_rendering`**: Prepare scene for rendering
+  - Ensures scene is ready, then renders
+  - Decomposes to `get_scene_info` and `render_image` commands
+
+### API Introspection
+- **`explore_blender_api`**: Explore Blender API paths
+  - Decomposes to `introspect_blender` or `introspect_python` commands
+  
+- **`introspect_blender_api`**: Alias for `explore_blender_api`
+  
+- **`discover_blender_capabilities`**: Discover common Blender capabilities
+  - Plans introspection of common API paths
+
+## Available Domain Commands
+
+The `create_forge_domain_spec()` provides these primitive commands:
+
+- **`create_cube`**: Create a cube object
+  - Args: `name`, `location`, `size`
+  
+- **`create_sphere`**: Create a sphere object
+  - Args: `name`, `location`, `radius`
+  
+- **`set_material`**: Apply material to object
+  - Args: `object_name`, `material_name`, `color`
+  
+- **`reset_scene`**: Reset scene to clean state
+  - Args: none
+  
+- **`get_scene_info`**: Get current scene information
+  - Args: none
+  
+- **`render_image`**: Render scene to image file
+  - Args: `filepath`, `resolution_x`, `resolution_y`
+  
+- **`introspect_blender`**: Introspect Blender API object
+  - Args: `object_path`
+  
+- **`introspect_python`**: Introspect Python object with prep code
+  - Args: `object_path`, `prep_code`
+
+## Plan Format
+
+Plans are returned as JSON strings. When decoded, they have this structure:
 
 ```json
 {
-  "mcpServers": {
-    "bpy-mcp": {
-      "command": "mix",
-      "args": ["mcp.server", "--port", "8080"],
-      "cwd": "/path/to/bpy-mcp"
+  "steps": [
+    {
+      "tool": "create_cube",
+      "args": {
+        "name": "Cube1",
+        "location": [0, 0, 0],
+        "size": 2.0
+      },
+      "dependencies": [],
+      "description": "Create cube 'Cube1'"
     }
-  }
+  ],
+  "total_operations": 1,
+  "estimated_complexity": "simple",
+  "planner": "run_lazy"
 }
 ```
 
-### Environment Variables
+### Plan Steps
 
-You can set environment variables for the server:
+Each step contains:
+- **`tool`**: The command/tool to execute
+- **`args`**: Arguments for the tool
+- **`dependencies`**: List of step IDs this step depends on (currently empty, handled by aria_planner)
+- **`description`**: Human-readable description
 
-```json
-{
-  "mcpServers": {
-    "bpy-mcp": {
-      "command": "mix",
-      "args": ["mcp.stdio"],
-      "cwd": "/path/to/bpy-mcp",
-      "env": {
-        "MIX_ENV": "dev",
-        "BLENDER_HEADLESS": "1",
-        "PORT": "4000",
-        "PYTHON_PATH": "/path/to/python"
+## Executing Plans
+
+After generating a plan, execute it using `execute_plan/2`:
+
+```elixir
+# Generate plan
+{:ok, plan_json} = AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir)
+
+# Execute plan
+result = AriaForge.Tools.Planning.execute_plan(plan_json, temp_dir)
+
+case result do
+  {:ok, message} ->
+    # Plan executed successfully
+    IO.puts("Success: #{message}")
+  {:error, reason} ->
+    # Plan execution failed
+    IO.puts("Error: #{reason}")
+end
+```
+
+Execution results include duration information in ISO 8601 format (e.g., "PT1S" for 1 second).
+
+## Error Handling
+
+### When aria_planner is Unavailable
+
+If `aria_planner` is not available, all planning functions return:
+
+```elixir
+{:error, "AriaPlanner not available. Planning requires aria_planner to be installed and available."}
+```
+
+**Action**: Ensure `aria_planner` is installed and available before attempting planning.
+
+### When Planning Fails
+
+If planning fails (e.g., invalid tasks, unsatisfiable constraints), functions return:
+
+```elixir
+{:error, "run_lazy failed: <error details>"}
+```
+
+**Action**: Review the error message, check task specifications, and verify constraints are satisfiable.
+
+### When Plan Execution Fails
+
+If plan execution fails (e.g., invalid tool, missing arguments), `execute_plan/2` returns:
+
+```elixir
+{:error, "Plan execution failed: <error details>"}
+```
+
+**Action**: Review the plan steps, verify tool names and arguments are correct.
+
+## Best Practices
+
+### 1. Always Check for aria_planner
+
+Before attempting planning, verify `aria_planner` is available:
+
+```elixir
+if Code.ensure_loaded?(AriaPlanner) do
+  # Proceed with planning
+else
+  # Handle error: aria_planner not available
+end
+```
+
+### 2. Use Appropriate Domain
+
+- Use `create_forge_domain_spec()` for comprehensive workflows
+- Use `create_scene_domain_spec()` for simple scene construction
+- Provide custom domain for specialized scenarios
+
+### 3. Structure Tasks Hierarchically
+
+Use high-level methods when possible:
+
+```elixir
+# Good: Use high-level method
+{"create_forge_scene", %{"objects" => [...]}}
+
+# Less ideal: Use low-level commands directly
+{"create_cube", %{"name" => "Cube1"}}
+```
+
+### 4. Include Constraints
+
+Specify dependencies and temporal constraints when needed:
+
+```elixir
+"constraints" => [
+  %{"type" => "dependency", "from" => "task1", "to" => "task2"},
+  %{"type" => "temporal", "total_frames" => 250}
+]
+```
+
+### 5. Handle Errors Gracefully
+
+Always handle both success and error cases:
+
+```elixir
+case AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir) do
+  {:ok, plan_json} ->
+    # Process plan
+  {:error, reason} ->
+    # Handle error appropriately
+end
+```
+
+## Example Workflows
+
+### Workflow 1: Create Scene with Reset
+
+```elixir
+plan_spec = %{
+  "initial_state" => %{"objects" => []},
+  "tasks" => [
+    {"create_forge_scene", %{
+      "reset_first" => true,
+      "objects" => [
+        %{"type" => "cube", "name" => "MainCube", "location" => [0, 0, 0], "size" => 2.0},
+        %{"type" => "sphere", "name" => "MainSphere", "location" => [3, 0, 0], "radius" => 1.5}
+      ],
+      "materials" => [
+        %{"name" => "RedMaterial", "color" => [1.0, 0.0, 0.0, 1.0], "objects" => ["MainCube"]},
+        %{"name" => "BlueMaterial", "color" => [0.0, 0.0, 1.0, 1.0], "objects" => ["MainSphere"]}
+      ]
+    }}
+  ],
+  "constraints" => [],
+  "domain" => nil,
+  "opts" => %{}
+}
+
+{:ok, plan_json} = AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir)
+{:ok, result} = AriaForge.Tools.Planning.execute_plan(plan_json, temp_dir)
+```
+
+### Workflow 2: Introspect Scene Then Create Objects
+
+```elixir
+plan_spec = %{
+  "initial_state" => %{"objects" => []},
+  "tasks" => [
+    {"introspect_scene", %{}},
+    {"create_forge_scene", %{
+      "objects" => [
+        %{"type" => "cube", "name" => "NewCube", "location" => [0, 0, 0]}
+      ]
+    }}
+  ],
+  "constraints" => [
+    %{"type" => "dependency", "from" => "introspect_scene", "to" => "create_forge_scene"}
+  ],
+  "domain" => nil,
+  "opts" => %{}
+}
+
+{:ok, plan_json} = AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir)
+```
+
+### Workflow 3: Render Scene
+
+```elixir
+plan_spec = %{
+  "initial_state" => %{"objects" => []},
+  "tasks" => [
+    {"create_forge_scene", %{
+      "objects" => [
+        %{"type" => "cube", "name" => "RenderCube", "location" => [0, 0, 0]}
+      ],
+      "render" => %{
+        "filepath" => "/tmp/render.png",
+        "resolution_x" => 1920,
+        "resolution_y" => 1080
       }
-    }
-  }
+    }}
+  ],
+  "constraints" => [],
+  "domain" => nil,
+  "opts" => %{}
 }
+
+{:ok, plan_json} = AriaForge.Tools.Planning.run_lazy_planning(plan_spec, temp_dir)
 ```
 
-### Multiple MCP Servers
+## Summary
 
-You can configure multiple MCP servers in the same configuration file:
+- **Required**: `aria_planner` must be installed and available
+- **Primary Function**: Use `run_lazy_planning/2` for all planning scenarios
+- **Domain**: Use `create_forge_domain_spec()` for comprehensive workflows
+- **Error Handling**: Always handle `{:error, reason}` cases
+- **Execution**: Use `execute_plan/2` to execute generated plans
+- **Dependencies**: Handled automatically by `aria_planner` via backtracking
+- **No Fallbacks**: Planning will fail if `aria_planner` is unavailable
 
-```json
-{
-  "mcpServers": {
-    "bpy-mcp": {
-      "command": "mix",
-      "args": ["mcp.stdio"],
-      "cwd": "/path/to/bpy-mcp"
-    },
-    "other-mcp-server": {
-      "command": "node",
-      "args": ["/path/to/other-server.js"]
-    }
-  }
-}
-```
-
-### Platform-Specific Paths
-
-**macOS/Linux:**
-```json
-{
-  "mcpServers": {
-    "bpy-mcp": {
-      "command": "mix",
-      "args": ["mcp.stdio"],
-      "cwd": "/Users/username/Developer/bpy-mcp"
-    }
-  }
-}
-```
-
-**Windows:**
-```json
-{
-  "mcpServers": {
-    "bpy-mcp": {
-      "command": "mix",
-      "args": ["mcp.stdio"],
-      "cwd": "C:\\Users\\username\\Developer\\bpy-mcp"
-    }
-  }
-}
-```
-
-## Available Tools
-
-The bpy-mcp server provides the following MCP tools:
-
-### `bpy_list_commands`
-Lists all available Blender commands with their schemas.
-
-**Example usage:**
-- "What Blender commands are available?"
-- "List all bpy commands"
-
-### `bpy_execute_command`
-Executes one or more Blender commands with their arguments.
-
-**Available commands:**
-- `create_cube` - Create a cube object
-  - Parameters: `name` (string), `location` (array), `size` (number)
-- `create_sphere` - Create a sphere object
-  - Parameters: `name` (string), `location` (array), `radius` (number)
-- `get_scene_info` - Get information about the current scene
-- `reset_scene` - Reset the scene to a clean state
-- `export_bmesh` - Export scene as BMesh data
-- `import_bmesh` - Import BMesh data from glTF JSON
-
-**Example usage:**
-- "Create a cube named 'Box' at position [1, 2, 3] with size 2.5"
-- "Create a sphere with radius 1.5"
-- "Get the current scene information"
-
-## Testing the Configuration
-
-After configuration, test the setup:
-
-1. **Verify server appears** in your editor's MCP settings
-2. **Check server status** - should show as "Connected" or "Active"
-3. **Try a simple query**: "List available Blender commands"
-4. **Test command execution**: "Create a test cube"
-
-If these work, your configuration is successful!
-
-## Next Steps
-
-- Explore the available Blender commands via `bpy_list_commands`
-- Try creating objects and scenes through your AI agent
-- Check the main [README.md](./README.md) for more information about the server capabilities
-- Experiment with different Blender operations through natural language
-
-## Additional Resources
-
-- **Main Documentation**: [README.md](./README.md)
-- **MCP Protocol**: [Model Context Protocol Specification](https://modelcontextprotocol.io)
-- **Blender Python API**: [Blender bpy Documentation](https://docs.blender.org/api/current/)
-
+For more details, see the source code in `lib/aria_forge/tools/planning.ex`.

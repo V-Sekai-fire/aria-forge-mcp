@@ -87,35 +87,27 @@ defmodule AriaForge.Tools.Planning do
                 convert_run_lazy_plan_to_scene_plan(plan_result)
 
               error ->
-                %{
-                  steps: [],
-                  total_operations: 0,
-                  estimated_complexity: "failed",
-                  error: "run_lazy failed: #{inspect(error)}"
-                }
+                {:error, "run_lazy failed: #{inspect(error)}"}
             end
           rescue
             e ->
-              %{
-                steps: [],
-                total_operations: 0,
-                estimated_complexity: "failed",
-                error: "run_lazy error: #{inspect(e)}"
-              }
+              {:error, "run_lazy error: #{inspect(e)}"}
           end
 
         false ->
-          %{
-            steps: [],
-            total_operations: 0,
-            estimated_complexity: "failed",
-            error: "AriaPlanner not available"
-          }
+          {:error, "AriaPlanner not available. Planning requires aria_planner to be installed and available."}
       end
 
-    case Jason.encode(plan) do
-      {:ok, json} -> {:ok, json}
-      error -> {:error, "Failed to encode plan: #{inspect(error)}"}
+    case plan do
+      {:error, _} = error ->
+        error
+      plan_map when is_map(plan_map) ->
+        case Jason.encode(plan_map) do
+          {:ok, json} -> {:ok, json}
+          error -> {:error, "Failed to encode plan: #{inspect(error)}"}
+        end
+      other ->
+        {:error, "Unexpected planning result: #{inspect(other)}"}
     end
   end
 
@@ -123,71 +115,93 @@ defmodule AriaForge.Tools.Planning do
   Plans a scene construction workflow.
 
   Given initial and goal scene states, generates a sequence of aria-forge commands.
+  Requires aria_planner to be available.
   """
   @spec plan_scene_construction(map(), String.t()) :: planning_result()
-  def plan_scene_construction(plan_spec, _temp_dir) do
+  def plan_scene_construction(plan_spec, temp_dir) do
     initial_state = Map.get(plan_spec, "initial_state", %{})
     goal_state = Map.get(plan_spec, "goal_state", %{})
     constraints = Map.get(plan_spec, "constraints", [])
 
-    # Try to use aria_planner if available, otherwise use simple planning
-    plan =
-      case Code.ensure_loaded?(AriaPlanner) do
-        true ->
-          try do
-            use_aria_planner_for_construction(initial_state, goal_state, constraints)
-          rescue
-            _ ->
-              # aria_planner loaded but has missing dependencies, fallback to simple planning
-              generate_construction_plan(initial_state, goal_state, constraints)
-          end
+    # Convert to run_lazy_planning format
+    run_lazy_spec = %{
+      "initial_state" => initial_state,
+      "tasks" => convert_goal_to_tasks(goal_state),
+      "constraints" => constraints,
+      "domain" => nil,
+      "opts" => %{}
+    }
 
-        false ->
-          generate_construction_plan(initial_state, goal_state, constraints)
-      end
-
-    case Jason.encode(plan) do
-      {:ok, json} -> {:ok, json}
-      error -> {:error, "Failed to encode plan: #{inspect(error)}"}
-    end
+    run_lazy_planning(run_lazy_spec, temp_dir)
   end
 
   @doc """
   Plans material application sequence.
 
   Plans the order of material creation and assignment to respect dependencies.
+  Requires aria_planner to be available.
   """
   @spec plan_material_application(map(), String.t()) :: planning_result()
-  def plan_material_application(plan_spec, _temp_dir) do
+  def plan_material_application(plan_spec, temp_dir) do
     objects = Map.get(plan_spec, "objects", [])
     materials = Map.get(plan_spec, "materials", [])
     dependencies = Map.get(plan_spec, "dependencies", [])
 
-    plan = generate_material_plan(objects, materials, dependencies)
+    # Convert to run_lazy_planning format
+    tasks = Enum.map(materials, fn mat ->
+      mat_name = Map.get(mat, "name", "Material")
+      {"apply_materials", %{"materials" => [mat], "objects" => objects}}
+    end)
 
-    case Jason.encode(plan) do
-      {:ok, json} -> {:ok, json}
-      error -> {:error, "Failed to encode plan: #{inspect(error)}"}
-    end
+    run_lazy_spec = %{
+      "initial_state" => %{"facts" => objects},
+      "tasks" => tasks,
+      "constraints" => dependencies,
+      "domain" => nil,
+      "opts" => %{}
+    }
+
+    run_lazy_planning(run_lazy_spec, temp_dir)
   end
 
   @doc """
   Plans animation sequence with temporal constraints.
 
   Generates a plan for setting keyframes with timing constraints.
+  Requires aria_planner to be available.
   """
   @spec plan_animation(map(), String.t()) :: planning_result()
-  def plan_animation(plan_spec, _temp_dir) do
+  def plan_animation(plan_spec, temp_dir) do
     animations = Map.get(plan_spec, "animations", [])
     constraints = Map.get(plan_spec, "constraints", [])
     total_frames = Map.get(plan_spec, "total_frames", 250)
 
-    plan = generate_animation_plan(animations, constraints, total_frames)
+    # Convert to run_lazy_planning format with temporal constraints
+    tasks = Enum.map(animations, fn anim ->
+      {"set_keyframe", anim}
+    end)
 
-    case Jason.encode(plan) do
-      {:ok, json} -> {:ok, json}
-      error -> {:error, "Failed to encode plan: #{inspect(error)}"}
-    end
+    # Add temporal constraints for frame timing
+    temporal_constraints = [
+      %{
+        "type" => "temporal",
+        "total_frames" => total_frames
+      }
+      | constraints
+    ]
+
+    run_lazy_spec = %{
+      "initial_state" => %{
+        "facts" => [],
+        "timeline" => %{"total_frames" => total_frames}
+      },
+      "tasks" => tasks,
+      "constraints" => temporal_constraints,
+      "domain" => nil,
+      "opts" => %{}
+    }
+
+    run_lazy_planning(run_lazy_spec, temp_dir)
   end
 
   @doc """
@@ -207,133 +221,6 @@ defmodule AriaForge.Tools.Planning do
   end
 
   # Private helper functions
-
-  defp generate_construction_plan(initial, goal, _constraints) do
-    initial_objects = Map.get(initial, "objects", [])
-    goal_objects = Map.get(goal, "objects", [])
-
-    # Determine what needs to be created
-    objects_to_create = goal_objects -- initial_objects
-
-    steps =
-      objects_to_create
-      |> Enum.with_index()
-      |> Enum.map(fn {obj_spec, idx} ->
-        obj_spec_map = if is_map(obj_spec), do: obj_spec, else: %{"name" => obj_spec}
-        obj_type = Map.get(obj_spec_map, "type", "cube")
-        name = Map.get(obj_spec_map, "name", "#{obj_type}#{idx}")
-        location = Map.get(obj_spec_map, "location", [0, 0, 0])
-        size = Map.get(obj_spec_map, "size", 2.0)
-        radius = Map.get(obj_spec_map, "radius", 1.0)
-
-        case obj_type do
-          "cube" ->
-            %{
-              tool: "create_cube",
-              args: %{
-                name: name,
-                location: location,
-                size: size
-              },
-              dependencies: [],
-              description: "Create cube '#{name}' at #{inspect(location)}"
-            }
-
-          "sphere" ->
-            %{
-              tool: "create_sphere",
-              args: %{
-                name: name,
-                location: location,
-                radius: radius
-              },
-              dependencies: [],
-              description: "Create sphere '#{name}' at #{inspect(location)}"
-            }
-
-          _ ->
-            %{
-              tool: "create_cube",
-              args: %{
-                name: name,
-                location: location,
-                size: size
-              },
-              dependencies: [],
-              description: "Create object '#{name}' at #{inspect(location)}"
-            }
-        end
-      end)
-
-    %{
-      steps: steps,
-      total_operations: length(steps),
-      estimated_complexity: complexity_label(length(steps))
-    }
-  end
-
-  defp generate_material_plan(objects, materials, dependencies) do
-    # Create material dependency graph
-    dep_map = build_dependency_map(dependencies)
-
-    # Sort materials by dependencies (topological sort)
-    sorted_materials = topological_sort(materials, dep_map)
-
-    steps =
-      sorted_materials
-      |> Enum.flat_map(fn mat ->
-        # First, ensure material exists (if not already created)
-        mat_steps = [
-          %{
-            tool: "set_material",
-            args: %{
-              object_name: find_object_for_material(objects, mat),
-              material_name: mat,
-              color: [0.8, 0.8, 0.8, 1.0]
-            },
-            dependencies: get_dependencies(mat, dep_map),
-            description: "Apply material '#{mat}' to object"
-          }
-        ]
-
-        mat_steps
-      end)
-
-    %{
-      steps: steps,
-      total_operations: length(steps),
-      estimated_complexity: complexity_label(length(steps))
-    }
-  end
-
-  defp generate_animation_plan(animations, constraints, total_frames) do
-    # Simple temporal planning: assign frames based on constraints
-    scheduled_animations = schedule_animations(animations, constraints, total_frames)
-
-    steps =
-      scheduled_animations
-      |> Enum.map(fn anim ->
-        %{
-          # Future tool
-          tool: "set_keyframe",
-          args: %{
-            object_name: Map.get(anim, "object"),
-            frame: Map.get(anim, "frame"),
-            property: Map.get(anim, "property"),
-            value: Map.get(anim, "value")
-          },
-          dependencies: get_animation_dependencies(anim, constraints),
-          description: "Set keyframe for #{Map.get(anim, "object")} at frame #{Map.get(anim, "frame")}"
-        }
-      end)
-
-    %{
-      steps: steps,
-      total_operations: length(steps),
-      estimated_complexity: complexity_label(length(steps)),
-      total_frames: total_frames
-    }
-  end
 
   defp execute_plan_steps(plan, temp_dir) do
     steps = Map.get(plan, "steps", [])
@@ -366,7 +253,10 @@ defmodule AriaForge.Tools.Planning do
   end
 
   defp execute_step(tool, args, temp_dir) do
-    case tool do
+    # Record start time
+    start_time = System.monotonic_time(:millisecond)
+    
+    result = case tool do
       "create_cube" ->
         name = Map.get(args, "name", "Cube")
         location = Map.get(args, "location", [0, 0, 0])
@@ -379,134 +269,300 @@ defmodule AriaForge.Tools.Planning do
         radius = Map.get(args, "radius", 1.0)
         AriaForge.Tools.Objects.create_sphere(name, location, radius, temp_dir)
 
-      "set_material" ->
+      "set_material" -> 
         object_name = Map.get(args, "object_name")
         material_name = Map.get(args, "material_name", "Material")
         color = Map.get(args, "color", [0.8, 0.8, 0.8, 1.0])
         AriaForge.Tools.Materials.set_material(object_name, material_name, color, temp_dir)
 
+      "introspect_blender" ->
+        object_path = Map.get(args, "object_path", "bmesh")
+        AriaForge.Tools.Introspection.introspect_blender(object_path, temp_dir)
+
+      "introspect_python" ->
+        object_path = Map.get(args, "object_path", "json")
+        prep_code = Map.get(args, "prep_code", nil)
+        AriaForge.Tools.Introspection.introspect_python(object_path, prep_code, temp_dir)
+
+      "reset_scene" ->
+        AriaForge.Tools.Scene.reset_scene(temp_dir)
+
+      "get_scene_info" ->
+        AriaForge.Tools.Scene.get_scene_info(temp_dir)
+
       _ ->
         {:error, "Unknown tool: #{tool}"}
     end
-  end
-
-  defp build_dependency_map(dependencies) do
-    dependencies
-    |> Enum.reduce(%{}, fn dep, acc ->
-      from = Map.get(dep, "from")
-      to = Map.get(dep, "to")
-
-      acc
-      |> Map.update(to, [from], &[from | &1])
-    end)
-  end
-
-  defp topological_sort(items, dep_map) do
-    # Simple topological sort (Kahn's algorithm)
-    items
-    |> Enum.sort_by(fn item ->
-      length(Map.get(dep_map, item, []))
-    end)
-  end
-
-  defp get_dependencies(item, dep_map) do
-    Map.get(dep_map, item, [])
-  end
-
-  defp find_object_for_material(objects, _material) do
-    # Simple heuristic: find first object that might need this material
-    case objects do
-      [] -> "Object1"
-      [obj | _] -> if is_map(obj), do: Map.get(obj, "name", "Object1"), else: obj
+    
+    # Record end time and calculate duration
+    end_time = System.monotonic_time(:millisecond)
+    duration_ms = end_time - start_time
+    duration_seconds = duration_ms / 1000.0
+    duration_iso = seconds_to_iso_duration(duration_seconds)
+    
+    # Return result with duration information
+    case result do
+      {:ok, message} ->
+        {:ok, "#{message} (duration: #{duration_iso})"}
+      error ->
+        error
     end
   end
 
-  defp schedule_animations(animations, _constraints, total_frames) do
-    # Simple scheduling: distribute animations across frames
-    frame_step = div(total_frames, max(length(animations), 1))
-
-    animations
-    |> Enum.with_index()
-    |> Enum.map(fn {anim, idx} ->
-      base_frame = idx * frame_step
-      frame = Map.get(anim, "frame", base_frame)
-
-      anim
-      |> Map.put("frame", min(frame, total_frames - 1))
-    end)
-  end
-
-  defp get_animation_dependencies(_anim, _constraints) do
-    # Extract dependencies from constraints
-    []
-  end
 
   defp complexity_label(count) when count < 5, do: "simple"
   defp complexity_label(count) when count < 15, do: "moderate"
   defp complexity_label(count) when count < 30, do: "complex"
   defp complexity_label(_), do: "very_complex"
 
-  # aria_planner integration functions (when library is available)
+  @doc """
+  Creates a comprehensive forge planner domain specification.
 
-  defp use_aria_planner_for_construction(initial_state, goal_state, constraints) do
-    # Use run_lazy for all planning - it handles both goal decomposition and temporal/dependency scheduling
-    # run_lazy can handle:
-    # - High-level goal decomposition (hierarchical planning)
-    # - Explicit object lists (task-based planning)
-    # - Temporal constraints (via temporal STN in aria_planner)
-    # - Dependencies (via dependency graph in domain spec)
-
-    case try_run_lazy(initial_state, goal_state, constraints) do
-      {:ok, plan} ->
-        plan
-
-      {:fallback, _reason} ->
-        # If run_lazy fails, fallback to simple planning
-        generate_construction_plan(initial_state, goal_state, constraints)
-    end
-  end
-
-  defp try_run_lazy(initial_state, goal_state, constraints) do
-    # Try to use run_lazy for goal-based planning with decomposition
-    case Code.ensure_loaded?(AriaPlanner) do
-      true ->
-        try do
-          # Convert goal_state to tasks/initial_state format for run_lazy
-          # run_lazy expects: domain, initial_state, tasks, opts, execution
-
-          # Create domain spec with methods and commands
-          domain = create_scene_domain_spec()
-
-          # Convert initial_state to planning format, including constraints
-          planning_initial_state =
-            convert_to_planning_state(initial_state)
-            |> add_constraints_to_state(constraints)
-
-          # Convert goal_state to tasks
-          tasks = convert_goal_to_tasks(goal_state)
-
-          # Call run_lazy (execution=false means planning only)
-          # run_lazy handles:
-          # - Goal decomposition (hierarchical planning)
-          # - Dependency resolution (via domain methods)
-          # - Temporal scheduling (via aria_planner's temporal STN)
-          # - Optimal ordering (via lazy refinement)
-          case AriaPlanner.run_lazy(domain, planning_initial_state, tasks, [], false) do
-            {:ok, plan} ->
-              # Extract solution plan from run_lazy result
-              convert_run_lazy_plan_to_scene_plan(plan)
-
-            error ->
-              {:fallback, "run_lazy failed: #{inspect(error)}"}
+  This domain includes all forge operations: object creation, materials, scene management, and rendering.
+  It provides methods for goal decomposition and commands for primitive operations.
+  """
+  @spec create_forge_domain_spec() :: map()
+  def create_forge_domain_spec do
+    # Create a comprehensive domain spec for all forge operations using run_lazy
+    # This defines methods (goal decomposition) and commands (primitive operations)
+    %{
+      methods: %{
+        "create_forge_scene" => fn _state, goal ->
+          # Method to decompose "create forge scene" into complete workflow
+          # Handles objects, materials, and rendering setup
+          tasks = []
+          
+          # Check if we need to reset scene first
+          if Map.get(goal, "reset_first", false) do
+            tasks = [{"reset_scene", %{}}]
           end
-        rescue
-          e ->
-            {:fallback, "run_lazy error: #{inspect(e)}"}
-        end
+          
+          # Optionally introspect scene before creating
+          if Map.get(goal, "introspect_first", false) do
+            tasks = tasks ++ [{"get_scene_info", %{}}]
+          end
 
-      false ->
-        {:fallback, "AriaPlanner not available"}
-    end
+          # Extract objects to create
+          objects = Map.get(goal, "objects", [])
+          tasks = if length(objects) > 0 do
+            tasks ++ Enum.map(objects, fn obj -> {"create_object", obj} end)
+          else
+            tasks
+          end
+
+          # Extract materials to apply
+          materials = Map.get(goal, "materials", [])
+          tasks = if length(materials) > 0 do
+            tasks ++ [{"apply_materials", %{"materials" => materials}}]
+          else
+            tasks
+          end
+
+          # Extract rendering requirements
+          tasks = if Map.has_key?(goal, "render") do
+            tasks ++ [{"prepare_rendering", Map.get(goal, "render", %{})}]
+          else
+            tasks
+          end
+
+          if Enum.empty?(tasks) do
+            # Fallback to basic scene creation
+            [{"create_scene", goal}]
+          else
+            tasks
+          end
+        end,
+        "create_scene" => fn _state, goal ->
+          # Method to decompose "create scene" into object creation tasks
+          # Handles both explicit objects list and high-level descriptions
+          case goal do
+            %{"objects" => objects} when is_list(objects) ->
+              # Explicit objects: create tasks respecting dependencies
+              Enum.map(objects, fn obj ->
+                obj_name = Map.get(obj, "name", "Object")
+                {"create_object", Map.put(obj, "name", obj_name)}
+              end)
+
+            %{"description" => desc} when is_binary(desc) ->
+              # High-level description: decompose into subgoals
+              # This would be expanded by run_lazy's goal decomposition
+              [{"create_floor", %{}}, {"create_walls", %{}}, {"create_furniture", %{}}]
+
+            _ ->
+              # Default: try to extract from goal_state
+              []
+          end
+        end,
+        "create_object" => fn _state, obj_spec ->
+          # Method to create individual objects with dependency checking
+          # run_lazy will handle scheduling based on dependencies
+          case obj_spec do
+            %{"type" => "cube"} -> [{"create_cube", obj_spec}]
+            %{"type" => "sphere"} -> [{"create_sphere", obj_spec}]
+            _ -> [{"create_cube", obj_spec}]
+          end
+        end,
+        "apply_materials" => fn _state, material_spec ->
+          # Method to decompose material application workflow
+          # Handles material creation and assignment to objects
+          materials = Map.get(material_spec, "materials", [])
+          objects = Map.get(material_spec, "objects", [])
+
+          Enum.flat_map(materials, fn mat ->
+            mat_name = Map.get(mat, "name", "Material")
+            target_objects = Map.get(mat, "objects", objects)
+
+            Enum.map(target_objects, fn obj_name ->
+              obj_name_str = if is_map(obj_name), do: Map.get(obj_name, "name", "Object"), else: obj_name
+              {"set_material", %{"object_name" => obj_name_str, "material_name" => mat_name, "color" => Map.get(mat, "color", [0.8, 0.8, 0.8, 1.0])}}
+            end)
+          end)
+        end,
+        "setup_materials" => fn _state, material_spec ->
+          # Method to setup materials (alias for apply_materials)
+          # Reuse the same logic as apply_materials
+          materials = Map.get(material_spec, "materials", [])
+          objects = Map.get(material_spec, "objects", [])
+
+          Enum.flat_map(materials, fn mat ->
+            mat_name = Map.get(mat, "name", "Material")
+            target_objects = Map.get(mat, "objects", objects)
+
+            Enum.map(target_objects, fn obj_name ->
+              obj_name_str = if is_map(obj_name), do: Map.get(obj_name, "name", "Object"), else: obj_name
+              {"set_material", %{"object_name" => obj_name_str, "material_name" => mat_name, "color" => Map.get(mat, "color", [0.8, 0.8, 0.8, 1.0])}}
+            end)
+          end)
+        end,
+        "prepare_rendering" => fn _state, render_spec ->
+          # Method to prepare rendering workflow
+          # Ensures scene is ready before rendering
+          filepath = Map.get(render_spec, "filepath", "render.png")
+          resolution_x = Map.get(render_spec, "resolution_x", 1920)
+          resolution_y = Map.get(render_spec, "resolution_y", 1080)
+
+          [
+            {"get_scene_info", %{}},
+            {"render_image", %{"filepath" => filepath, "resolution_x" => resolution_x, "resolution_y" => resolution_y}}
+          ]
+        end,
+        "explore_blender_api" => fn _state, api_spec ->
+          # Method to decompose Blender API exploration into introspection steps
+          # When connected via MCP, this plans steps to introspect Blender's API
+          paths = Map.get(api_spec, "paths", ["bmesh"])
+          prep_code = Map.get(api_spec, "prep_code", nil)
+
+          Enum.map(paths, fn path ->
+            if prep_code != nil do
+              {"introspect_python", %{"object_path" => path, "prep_code" => prep_code}}
+            else
+              {"introspect_blender", %{"object_path" => path}}
+            end
+          end)
+        end,
+        "introspect_blender_api" => fn _state, api_spec ->
+          # Method alias for exploring Blender API
+          # Reuse the same logic as explore_blender_api
+          paths = Map.get(api_spec, "paths", ["bmesh"])
+          prep_code = Map.get(api_spec, "prep_code", nil)
+
+          Enum.map(paths, fn path ->
+            if prep_code != nil do
+              {"introspect_python", %{"object_path" => path, "prep_code" => prep_code}}
+            else
+              {"introspect_blender", %{"object_path" => path}}
+            end
+          end)
+        end,
+        "discover_blender_capabilities" => fn _state, _spec ->
+          # Method to discover Blender capabilities via introspection
+          # Plans a sequence of introspection steps for common Blender API paths
+          common_paths = [
+            "bmesh",
+            "bmesh.ops",
+            "bpy",
+            "bpy.context",
+            "bpy.data",
+            "bpy.ops"
+          ]
+
+          Enum.map(common_paths, fn path ->
+            {"introspect_blender", %{"object_path" => path}}
+          end)
+        end,
+        "introspect_scene" => fn _state, _spec ->
+          # Method to introspect the current scene state
+          # Gets information about objects, materials, and scene configuration
+          [{"get_scene_info", %{}}]
+        end,
+        "reset_and_prepare_scene" => fn _state, goal ->
+          # Method to reset scene and then prepare it for new work
+          # Useful when starting fresh or clearing existing content
+          tasks = [{"reset_scene", %{}}]
+          
+          # If goal specifies objects or materials, add those after reset
+          objects = Map.get(goal, "objects", [])
+          if length(objects) > 0 do
+            tasks = tasks ++ Enum.map(objects, fn obj -> {"create_object", obj} end)
+          end
+          
+          materials = Map.get(goal, "materials", [])
+          if length(materials) > 0 do
+            tasks = tasks ++ [{"apply_materials", %{"materials" => materials}}]
+          end
+          
+          tasks
+        end,
+        "prepare_clean_scene" => fn _state, goal ->
+          # Method alias for reset_and_prepare_scene
+          reset_fn = Map.get(create_forge_domain_spec().methods, "reset_and_prepare_scene")
+          reset_fn.(_state, goal)
+        end
+      },
+      commands: %{
+        "create_cube" => fn state, _args ->
+          # Command: create cube
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
+        end,
+        "create_sphere" => fn state, _args ->
+          # Command: create sphere
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
+        end,
+        "set_material" => fn state, _args ->
+          # Command: set material on object
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
+        end,
+        "reset_scene" => fn state, _args ->
+          # Command: reset scene to clean state
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
+        end,
+        "get_scene_info" => fn state, _args ->
+          # Command: get scene information
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
+        end,
+        "render_image" => fn state, _args ->
+          # Command: render scene to image
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
+        end,
+        "introspect_blender" => fn state, _args ->
+          # Command: introspect Blender/bmesh API structure
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
+        end,
+        "introspect_python" => fn state, _args ->
+          # Command: introspect Python object/API structure
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
+        end
+      },
+      initial_tasks: []
+    }
   end
 
   defp create_scene_domain_spec do
@@ -547,24 +603,45 @@ defmodule AriaForge.Tools.Planning do
         end
       },
       commands: %{
-        "create_cube" => fn state, args ->
-          # Command: create cube with duration estimation
-          # run_lazy uses durations for temporal scheduling
-          duration = estimate_command_duration("create_cube", args)
-          {:ok, state, duration}
+        "create_cube" => fn state, _args ->
+          # Command: create cube
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
         end,
-        "create_sphere" => fn state, args ->
-          # Command: create sphere with duration estimation
-          duration = estimate_command_duration("create_sphere", args)
-          {:ok, state, duration}
+        "create_sphere" => fn state, _args ->
+          # Command: create sphere
+          # Duration will be recorded during actual execution
+          {:ok, state, "PT1S"}
         end
       },
       initial_tasks: []
     }
   end
 
-  defp estimate_command_duration(command, _args) when command in ["create_cube", "create_sphere"], do: 1
-  defp estimate_command_duration(_command, _args), do: 1
+  @doc """
+  Converts seconds to ISO 8601 duration string.
+  
+  Examples:
+  - 1 second -> "PT1S"
+  - 30 seconds -> "PT30S"
+  - 90 seconds -> "PT1M30S"
+  - 3600 seconds -> "PT1H"
+  """
+  defp seconds_to_iso_duration(seconds) when is_float(seconds) or is_integer(seconds) do
+    total_seconds = trunc(seconds)
+    
+    hours = div(total_seconds, 3600)
+    minutes = div(rem(total_seconds, 3600), 60)
+    secs = rem(total_seconds, 60)
+    
+    parts = []
+    parts = if hours > 0, do: ["#{hours}H" | parts], else: parts
+    parts = if minutes > 0, do: ["#{minutes}M" | parts], else: parts
+    parts = if secs > 0, do: ["#{secs}S" | parts], else: parts
+    
+    # Always include at least seconds, even if 0
+    if Enum.empty?(parts), do: "PT0S", else: "PT" <> Enum.join(parts)
+  end
 
   defp add_constraints_to_state(state, constraints) when is_list(constraints) do
     # Extract dependencies and temporal constraints from constraints list
