@@ -3,7 +3,7 @@
   "aria_core": {:git, "https://github.com/V-Sekai-fire/aria-core.git", "abcbc4cd2bb0ed8bf7755ffad779c5dc3938deb4", []},
   "aria_math": {:git, "https://github.com/V-Sekai-fire/aria-math.git", "68cffe8af023aff720f7f55cd64b36057e69058d", []},
   "aria_planner": {:git, "https://github.com/V-Sekai-fire/aria-planner.git", "7d2948ee14225f29abbdd36daefa552ce6633375", []},
-  "aria_storage": {:git, "https://github.com/V-Sekai-fire/aria-storage.git", "d026ba34a9e11cea74eedf2a82fbb27765046116", []},
+  "aria_storage": {:git, "https://github.com/V-Sekai-fire/aria-storage.git", "2ae9d51537a7272d489663c56206731312c961aa", []},
   "axon": {:hex, :axon, "0.7.0", "2e2c6d93b4afcfa812566b8922204fa022b60081e86ebd411df4db7ea30f5457", [:mix], [{:kino, "~> 0.7", [hex: :kino, repo: "hexpm", optional: true]}, {:kino_vega_lite, "~> 0.1.7", [hex: :kino_vega_lite, repo: "hexpm", optional: true]}, {:nx, "~> 0.9", [hex: :nx, repo: "hexpm", optional: false]}, {:polaris, "~> 0.1", [hex: :polaris, repo: "hexpm", optional: false]}, {:table_rex, "~> 3.1.1", [hex: :table_rex, repo: "hexpm", optional: true]}], "hexpm", "ee9857a143c9486597ceff434e6ca833dc1241be6158b01025b8217757ed1036"},
   "briefly": {:hex, :briefly, "0.5.1", "ee10d48da7f79ed2aebdc3e536d5f9a0c3e36ff76c0ad0d4254653a152b13a8a", [:mix], [], "hexpm", "bd684aa92ad8b7b4e0d92c31200993c4bc1469fc68cd6d5f15144041bd15cb57"},
   "bunt": {:hex, :bunt, "1.0.0", "081c2c665f086849e6d57900292b3a161727ab40431219529f13c4ddcf3e7a44", [:mix], [], "hexpm", "dc5f86aa08a5f6fa6b8096f0735c4e76d54ae5c9fa2c143e5a1fc7c1cd9bb6b5"},
