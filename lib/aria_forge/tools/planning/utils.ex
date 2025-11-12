@@ -31,15 +31,5 @@ defmodule AriaForge.Tools.Planning.Utils do
     # Always include at least seconds, even if 0
     if Enum.empty?(parts), do: "PT0S", else: "PT" <> Enum.join(parts)
   end
-
-  @doc """
-  Returns a complexity label based on operation count.
-  """
-  @spec complexity_label(integer()) :: String.t()
-  def complexity_label(count) when count < 5, do: "simple"
-  def complexity_label(count) when count < 15, do: "moderate"
-  def complexity_label(count) when count < 30, do: "complex"
-  def complexity_label(_), do: "very_complex"
-
 end
 

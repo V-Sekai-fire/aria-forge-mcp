@@ -23,11 +23,9 @@ defmodule AriaForge.PlanningTest do
       assert is_map(plan)
       assert Map.has_key?(plan, "steps")
       assert Map.has_key?(plan, "total_operations")
-      assert Map.has_key?(plan, "estimated_complexity")
 
       assert is_list(plan["steps"])
       assert plan["total_operations"] >= 1
-      assert is_binary(plan["estimated_complexity"])
     end
 
     test "handles multiple objects in goal state" do
@@ -75,7 +73,6 @@ defmodule AriaForge.PlanningTest do
 
       assert plan["total_operations"] == 0
       assert plan["steps"] == []
-      assert plan["estimated_complexity"] == "simple"
     end
 
     test "includes correct location and size parameters" do
@@ -113,7 +110,7 @@ defmodule AriaForge.PlanningTest do
       result = Planning.plan_scene_construction(plan_spec, @temp_dir)
       {:ok, json} = result
       {:ok, plan} = Jason.decode(json)
-      assert plan["estimated_complexity"] == "simple"
+      assert plan["total_operations"] == 3
     end
   end
 

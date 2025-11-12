@@ -20,8 +20,7 @@ defmodule AriaForge.Tools.Planning do
         }
   @type plan :: %{
           steps: [plan_step()],
-          total_operations: integer(),
-          estimated_complexity: String.t()
+          total_operations: integer()
         }
 
   @doc """
@@ -308,12 +307,6 @@ defmodule AriaForge.Tools.Planning do
         error
     end
   end
-
-
-  defp complexity_label(count) when count < 5, do: "simple"
-  defp complexity_label(count) when count < 15, do: "moderate"
-  defp complexity_label(count) when count < 30, do: "complex"
-  defp complexity_label(_), do: "very_complex"
 
   @doc """
   Creates a comprehensive forge planner domain specification.
@@ -800,7 +793,6 @@ defmodule AriaForge.Tools.Planning do
                %{
                  steps: steps,
                  total_operations: length(steps),
-                 estimated_complexity: complexity_label(length(steps)),
                  planner: "run_lazy",
                  solution_graph: Map.get(plan, :solution_graph_data, %{})
                }}

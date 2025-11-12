@@ -85,8 +85,7 @@ defmodule AriaForge.NativeService.Prompts do
                 {"tool": "create_sphere", "args": {"name": "Sphere1", "location": [0,3,0], "radius": 1.0}},
                 {"tool": "create_sphere", "args": {"name": "Sphere2", "location": [3,3,0], "radius": 1.0}}
               ],
-              "total_operations": 5,
-              "estimated_complexity": "simple"
+              "total_operations": 5
             }
             """
           }

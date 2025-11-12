@@ -301,7 +301,6 @@ Plans are returned as JSON strings. When decoded, they have this structure:
     }
   ],
   "total_operations": 1,
-  "estimated_complexity": "simple",
   "planner": "run_lazy"
 }
 ```
